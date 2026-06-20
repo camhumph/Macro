@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Macro — 8 Week Shred</title>
+  <meta name="description" content="Your no-excuses 8-week muscle + abs coach. Workouts, macros, weigh-ins." />
+
+  <!-- PWA / iPhone home screen -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0c0d10" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Macro" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- App root -->
+  <div id="app">
+    <!-- Top app bar -->
+    <header id="appbar">
+      <div class="appbar-inner">
+        <div class="brand">
+          <span class="brand-mark">M</span>
+          <div class="brand-text">
+            <strong id="appbar-title">Today</strong>
+            <small id="appbar-sub">Let's get to work.</small>
+          </div>
+        </div>
+        <button id="profile-btn" class="icon-btn" aria-label="Profile">
+          <span id="profile-initial">?</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Routed page content -->
+    <main id="view"></main>
+
+    <!-- Bottom tab bar -->
+    <nav id="tabbar">
+      <button class="tab" data-route="today" aria-label="Today">
+        <svg viewBox="0 0 24 24"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm8 0h6V11h-6v9Zm0-16v5h6V4h-6Z"/></svg>
+        <span>Today</span>
+      </button>
+      <button class="tab" data-route="food" aria-label="Food">
+        <svg viewBox="0 0 24 24"><path d="M8.1 3v8.5a2.4 2.4 0 0 1-4.8 0V3H4v6.2h.9V3h1.1v6.2h.9V3h1.2Zm-2.4 9.7V21H6v-8.3a3.4 3.4 0 0 0 1.1-.6 3.5 3.5 0 0 0 1-2.6V3h.8v18h.3V3h.8v18h.3V3h.8v6.5a3.5 3.5 0 0 0 1 2.6 3.4 3.4 0 0 0 1.1.6V21h.3v-8.3M19 3c-1.7 0-3 2.5-3 6 0 2.9 1 4.8 2.3 5.3V21h.7v-6.7C20.2 13.8 21 12 21 9c0-3.5-1.3-6-2-6Z"/></svg>
+        <span>Food</span>
+      </button>
+      <button class="tab tab-fab" data-route="log" aria-label="Quick add">
+        <svg viewBox="0 0 24 24"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/></svg>
+      </button>
+      <button class="tab" data-route="weight" aria-label="Weight">
+        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-9 9 9 9 0 0 0 9 9 9 9 0 0 0 9-9 9 9 0 0 0-9-9Zm0 2a7 7 0 0 1 6.7 5H5.3A7 7 0 0 1 12 5Zm1 3-2.5 4h5L13 8Z"/></svg>
+        <span>Weight</span>
+      </button>
+      <button class="tab" data-route="stats" aria-label="Stats">
+        <svg viewBox="0 0 24 24"><path d="M4 20V10h4v10H4Zm6 0V4h4v16h-4Zm6 0v-7h4v7h-4Z"/></svg>
+        <span>Stats</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Modal host -->
+  <div id="modal-host" class="modal-host hidden"></div>
+  <!-- Toast host -->
+  <div id="toast-host"></div>
+
+  <!-- Scripts (classic, ordered, namespaced under window.App) -->
+  <script src="js/data.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/workout.js"></script>
+  <script src="js/food.js"></script>
+  <script src="js/weight.js"></script>
+  <script src="js/reminders.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
