@@ -8,6 +8,7 @@ App.Food = (function () {
   const Store = App.Store, UI = App.UI;
 
   const MEALS = ['Breakfast','Lunch','Dinner','Snacks'];
+  const barcodeIco = `<svg width="16" height="16" viewBox="0 0 24 24" style="fill:currentColor;vertical-align:-2px"><path d="M2 5h2v14H2V5Zm3 0h1v14H5V5Zm2 0h2v14H7V5Zm3 0h1v14h-1V5Zm3 0h2v14h-2V5Zm3 0h1v14h-1V5Zm2 0h3v14h-3V5Z"/></svg>`;
 
   function mealOf(entry) { return entry.meal || 'Snacks'; }
 
@@ -46,7 +47,8 @@ App.Food = (function () {
 
       <button class="btn primary" id="food-add" style="margin-top:14px"><svg width="18" height="18" viewBox="0 0 24 24" style="fill:currentColor"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/></svg> Add Food</button>
       <div class="btn-row">
-        <button class="btn" id="food-scan">🏷️ Scan Label</button>
+        <button class="btn" id="food-barcode">${barcodeIco} Barcode</button>
+        <button class="btn" id="food-scan">🏷️ Label</button>
         <button class="btn" id="food-photo">📷 Photo</button>
       </div>
     `;
@@ -73,6 +75,7 @@ App.Food = (function () {
     container.innerHTML = html;
 
     container.querySelector('#food-add').onclick = () => searchSheet();
+    container.querySelector('#food-barcode').onclick = () => App.Barcode.scan();
     container.querySelector('#food-scan').onclick = () => App.Scan.scanLabel();
     container.querySelector('#food-photo').onclick = () => photoSheet();
     App.Scan.wirePantry(container);
@@ -102,12 +105,16 @@ App.Food = (function () {
     UI.modal(`
       <h2>Add Food</h2>
       <input class="input" id="food-q" placeholder="Search foods (e.g. chipotle, rice, footlong)…" autocomplete="off">
-      <button class="btn ghost small" id="food-scan2" style="margin-top:10px;width:100%">🏷️ Scan a nutrition label instead</button>
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn ghost small" id="food-bc2" style="flex:1">${barcodeIco} Barcode</button>
+        <button class="btn ghost small" id="food-scan2" style="flex:1">🏷️ Label</button>
+      </div>
       <div id="food-results" style="margin-top:14px"></div>
     `, (m) => {
       const q = m.querySelector('#food-q');
       const res = m.querySelector('#food-results');
       m.querySelector('#food-scan2').onclick = () => { UI.closeModal(); App.Scan.scanLabel(); };
+      m.querySelector('#food-bc2').onclick = () => { UI.closeModal(); App.Barcode.scan(); };
       const renderResults = () => {
         const term = q.value.trim().toLowerCase();
         // pantry / My Foods matches first

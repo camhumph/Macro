@@ -236,6 +236,13 @@ a{color:var(--accent-3)}
 .segment button{flex:1;padding:9px;border-radius:9px;font-size:13px;font-weight:700;color:var(--muted)}
 .segment button.on{background:var(--card-2);color:var(--text)}
 
+/* barcode scanner frame */
+.bc-frame{position:relative;border-radius:18px;overflow:hidden;background:#000;aspect-ratio:4/3;border:1px solid var(--line)}
+.bc-frame video{width:100%;height:100%;object-fit:cover;display:block}
+.bc-reticle{position:absolute;inset:14% 10%;border:2px solid rgba(198,255,58,.85);border-radius:14px;box-shadow:0 0 0 2000px rgba(0,0,0,.28)}
+.bc-line{position:absolute;left:0;right:0;height:2px;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:bcScan 1.8s ease-in-out infinite}
+@keyframes bcScan{0%{top:4%}50%{top:94%}100%{top:4%}}
+
 .divider{height:1px;background:var(--line);margin:16px 0}
 .list-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--line)}
 .list-row:last-child{border-bottom:none}
