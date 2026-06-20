@@ -31,6 +31,7 @@ App.Store = (function () {
       workoutLogs:{},  // dateKey -> { week, phase, dayType, dayName, exercises:[...] }
       foodLogs:{},     // dateKey -> [ entries ]
       weightLogs:[],   // [ { date, weight } ] sorted by date
+      pantry:[],       // scanned/saved foods you draw portions from
       lastAdjustWeek:0 // last week we auto-adjusted calories
     };
   }
@@ -126,6 +127,25 @@ App.Store = (function () {
     }, { cal:0, protein:0, carbs:0, fat:0 });
   }
 
+  /* ---------- pantry (scanned / saved foods you draw portions from) ---------- */
+  function pantry() { return state.pantry; }
+  function addPantry(item) {
+    item.id = 'pn' + Date.now() + Math.floor(Math.random()*999);
+    item.createdAt = Date.now();
+    state.pantry.unshift(item);
+    save();
+    return item;
+  }
+  function updatePantry(id, patch) {
+    const it = state.pantry.find(p => p.id === id);
+    if (it) { Object.assign(it, patch); save(); }
+    return it;
+  }
+  function removePantry(id) {
+    state.pantry = state.pantry.filter(p => p.id !== id);
+    save();
+  }
+
   /* ---------- workouts ---------- */
   function workoutLog(dateKey) {
     dateKey = dateKey || todayKey();
@@ -158,6 +178,7 @@ App.Store = (function () {
     weekFor, daysUntilClimb, daysIntoProgram, dayDiff,
     logWeight, weightToday, latestWeight,
     foodLog, addFood, removeFood, dayTotals,
+    pantry, addPantry, updatePantry, removePantry,
     workoutLog, saveWorkout, exerciseHistory,
     resetAll,
   };

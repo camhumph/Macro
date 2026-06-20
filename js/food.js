@@ -44,11 +44,15 @@ App.Food = (function () {
         </div>
       </div>
 
+      <button class="btn primary" id="food-add" style="margin-top:14px"><svg width="18" height="18" viewBox="0 0 24 24" style="fill:currentColor"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/></svg> Add Food</button>
       <div class="btn-row">
-        <button class="btn primary" id="food-add"><svg width="18" height="18" viewBox="0 0 24 24" style="fill:currentColor"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/></svg> Add Food</button>
-        <button class="btn" id="food-photo">📷 Snap</button>
+        <button class="btn" id="food-scan">🏷️ Scan Label</button>
+        <button class="btn" id="food-photo">📷 Photo</button>
       </div>
     `;
+
+    // My Foods / pantry (scanned items you draw portions from)
+    html += App.Scan.pantryRows();
 
     // grouped meals
     html += MEALS.map(m => {
@@ -69,7 +73,9 @@ App.Food = (function () {
     container.innerHTML = html;
 
     container.querySelector('#food-add').onclick = () => searchSheet();
+    container.querySelector('#food-scan').onclick = () => App.Scan.scanLabel();
     container.querySelector('#food-photo').onclick = () => photoSheet();
+    App.Scan.wirePantry(container);
     container.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       Store.removeFood(b.dataset.del);
       page(container);
@@ -96,25 +102,37 @@ App.Food = (function () {
     UI.modal(`
       <h2>Add Food</h2>
       <input class="input" id="food-q" placeholder="Search foods (e.g. chipotle, rice, footlong)…" autocomplete="off">
+      <button class="btn ghost small" id="food-scan2" style="margin-top:10px;width:100%">🏷️ Scan a nutrition label instead</button>
       <div id="food-results" style="margin-top:14px"></div>
     `, (m) => {
       const q = m.querySelector('#food-q');
       const res = m.querySelector('#food-results');
+      m.querySelector('#food-scan2').onclick = () => { UI.closeModal(); App.Scan.scanLabel(); };
       const renderResults = () => {
         const term = q.value.trim().toLowerCase();
+        // pantry / My Foods matches first
+        let pan = Store.pantry();
+        if (term) pan = pan.filter(p => p.name.toLowerCase().includes(term));
+        const panHTML = pan.length ? `<div class="meal-head" style="margin-top:0"><b>My Foods</b><span>portions</span></div>` + pan.map(p => `
+          <div class="search-result" data-portion="${p.id}">
+            <div class="food-thumb">🏷️</div>
+            <div class="sr-main"><b>${UI.esc(p.name)}</b><small>${UI.round(p.perServing.cal)} cal / ${UI.esc(p.servingSizeText||'serving')} · ${UI.round(p.remainingServings*10)/10} left</small></div>
+            <div style="color:var(--accent);font-size:24px">＋</div>
+          </div>`).join('') + `<div class="meal-head"><b>Database</b><span></span></div>` : '';
+
         let list = DATA.FOODS;
         if (term) list = DATA.FOODS.filter(f =>
           f.name.toLowerCase().includes(term) || (f.tags||[]).some(t => t.includes(term)));
         list = list.slice(0, 30);
-        res.innerHTML = list.length ? list.map(f => `
+        res.innerHTML = panHTML + (list.length ? list.map(f => `
           <div class="search-result" data-food="${f.id}">
             <div class="food-thumb">${f.emoji||'🍴'}</div>
             <div class="sr-main"><b>${UI.esc(f.name)}</b><small>${UI.esc(f.serving)} · ${f.cal} cal · P${f.p} C${f.c} F${f.f}</small></div>
             <div style="color:var(--accent);font-size:24px">＋</div>
-          </div>`).join('') +
-          `<button class="btn ghost" id="food-custom" style="margin-top:6px">Can't find it? Enter custom macros</button>`
-          : `<div class="empty"><div class="big">🔍</div>No match.<button class="btn primary small" id="food-custom" style="margin-top:12px">Enter custom food</button></div>`;
+          </div>`).join('') : (term ? `<div class="empty" style="padding:18px">No database match.</div>` : '')) +
+          `<button class="btn ghost" id="food-custom" style="margin-top:6px">Can't find it? Enter custom macros</button>`;
         res.querySelectorAll('[data-food]').forEach(el => el.onclick = () => quantitySheet(DATA.foodById[el.dataset.food], presetMeal));
+        res.querySelectorAll('[data-portion]').forEach(el => el.onclick = () => { UI.closeModal(); App.Scan.portionSheet(el.dataset.portion); });
         const cust = res.querySelector('#food-custom');
         if (cust) cust.onclick = () => customSheet(presetMeal);
       };
