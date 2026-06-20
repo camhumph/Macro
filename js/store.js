@@ -185,6 +185,19 @@ App.Store = (function () {
 
   function resetAll() { state = defaultState(); save(); }
 
+  // Replace all data from a backup object (used by Import).
+  function importState(obj) {
+    if (!obj || typeof obj !== 'object' || !obj.profile) throw new Error('Not a valid Macro backup');
+    const d = defaultState();
+    state = Object.assign(d, obj, { profile: Object.assign(d.profile, obj.profile || {}) });
+    save();
+  }
+
+  // Ask the browser to keep our data durable (reduces iOS eviction).
+  function requestPersist() {
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  }
+
   return {
     KEY, todayKey, get, save, profile, setProfile,
     weekFor, daysUntilClimb, daysIntoProgram, dayDiff,
@@ -192,6 +205,7 @@ App.Store = (function () {
     foodLog, addFood, updateFood, removeFood, dayTotals,
     pantry, addPantry, updatePantry, removePantry,
     getProgramOverride, setProgramOverride, clearProgramOverride,
+    importState, requestPersist,
     workoutLog, saveWorkout, exerciseHistory,
     resetAll,
   };

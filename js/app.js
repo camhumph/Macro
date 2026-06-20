@@ -127,12 +127,22 @@ window.App = window.App || {};
       </div>
       ${UI.field('Reminder time', `<input class="input" id="s-time" type="time" value="${p.weighInTime}">`)}
 
-      <button class="btn primary" id="s-save" style="margin-top:8px">Save</button>
+      <div class="divider"></div>
+      <b>Data & Backup</b>
+      <p class="muted" style="margin:6px 0 12px;font-size:12.5px;line-height:1.5">On iPhone, the Home-Screen app and Safari keep <b>separate</b> data. Always use this installed app, and back up regularly so nothing is lost.</p>
+      <div class="btn-row" style="margin-top:0">
+        <button class="btn" id="s-export">⬆️ Export backup</button>
+        <button class="btn" id="s-import">⬇️ Import / Restore</button>
+      </div>
+
+      <button class="btn primary" id="s-save" style="margin-top:18px">Save</button>
       <button class="btn ghost danger" id="s-reset" style="margin-top:10px">Reset all data</button>
       <p class="muted center" style="font-size:12px;margin-top:14px">Macro — your data lives only on this device.</p>
     `, (m, close) => {
       const rem = m.querySelector('#s-rem');
       rem.onclick = () => rem.classList.toggle('on');
+      m.querySelector('#s-export').onclick = exportBackup;
+      m.querySelector('#s-import').onclick = importBackup;
       m.querySelector('#s-save').onclick = async () => {
         const wantRem = rem.classList.contains('on');
         Store.setProfile({
@@ -158,6 +168,69 @@ window.App = window.App || {};
         if (confirm('Erase all workouts, food and weight history? This cannot be undone.')) {
           Store.resetAll(); close(); location.reload();
         }
+      };
+    });
+  }
+
+  /* ---------- Backup: export / import ---------- */
+  function exportBackup() {
+    const json = JSON.stringify(Store.get());
+    UI.modal(`
+      <h2>Export Backup</h2>
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Save this somewhere safe (email it to yourself, paste into Notes). To move to a new phone or the Home-Screen app, paste it into <b>Import</b> there.</p>
+      <textarea class="input" id="bk-data" readonly style="height:130px;font-size:11px;font-family:monospace">${UI.esc(json)}</textarea>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn primary" id="bk-copy">📋 Copy</button>
+        <button class="btn" id="bk-file">💾 Download file</button>
+      </div>
+      <button class="btn ghost" id="bk-share" style="margin-top:10px">Share…</button>
+    `, (m, close) => {
+      m.querySelector('#bk-copy').onclick = async () => {
+        try { await navigator.clipboard.writeText(json); UI.toast('Copied ✅','good'); }
+        catch (e) { const ta = m.querySelector('#bk-data'); ta.focus(); ta.select(); UI.toast('Select all & copy'); }
+      };
+      m.querySelector('#bk-file').onclick = () => {
+        const blob = new Blob([json], { type:'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `macro-backup-${Store.todayKey()}.json`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      };
+      const shareBtn = m.querySelector('#bk-share');
+      if (navigator.share) shareBtn.onclick = () => {
+        const file = new File([json], `macro-backup-${Store.todayKey()}.json`, { type:'application/json' });
+        if (navigator.canShare && navigator.canShare({ files:[file] })) navigator.share({ files:[file], title:'Macro backup' }).catch(()=>{});
+        else navigator.share({ title:'Macro backup', text:json }).catch(()=>{});
+      };
+      else shareBtn.style.display = 'none';
+    });
+  }
+
+  function importBackup() {
+    UI.modal(`
+      <h2>Import / Restore</h2>
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Paste a backup below, or pick a backup file. This <b>replaces</b> everything currently in the app.</p>
+      <input type="file" id="im-file" accept="application/json,.json,text/plain" class="input" style="padding:10px">
+      <textarea class="input" id="im-data" placeholder="…or paste backup text here" style="height:120px;font-size:11px;font-family:monospace;margin-top:12px"></textarea>
+      <button class="btn primary" id="im-go" style="margin-top:14px">Restore this backup</button>
+    `, (m, close) => {
+      const ta = m.querySelector('#im-data');
+      m.querySelector('#im-file').onchange = (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        const r = new FileReader();
+        r.onload = () => { ta.value = r.result; UI.toast('File loaded — tap Restore'); };
+        r.readAsText(f);
+      };
+      m.querySelector('#im-go').onclick = () => {
+        const raw = ta.value.trim();
+        if (!raw) return UI.toast('Paste a backup or pick a file');
+        let obj;
+        try { obj = JSON.parse(raw); } catch (e) { return UI.toast('That isn\'t valid backup text'); }
+        try { Store.importState(obj); } catch (e) { return UI.toast(e.message || 'Invalid backup'); }
+        if (confirm('Backup loaded. Reload now to apply?')) location.reload();
+        else { close(); Router.refresh(); UI.toast('Restored ✅','good'); }
       };
     });
   }
@@ -219,6 +292,7 @@ window.App = window.App || {};
     });
     document.getElementById('profile-btn').onclick = settings;
 
+    Store.requestPersist();   // ask iOS/Safari to keep our data durable
     Router.go('today');
     App.Reminders.start();
 

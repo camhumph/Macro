@@ -52,6 +52,25 @@ App.DATA = (function () {
     { id:'chp_steak',name:'Chipotle — Double Steak', emoji:'🌯', serving:'2 scoops (8oz)', cal:300, p:42, c:2, f:13, tags:['chipotle','protein'] },
     { id:'chp_pastor',name:'Chipotle — Chicken al Pastor (double)', emoji:'🌯', serving:'2 scoops (8oz)', cal:400, p:42, c:8, f:22, tags:['chipotle','protein'] },
     { id:'chp_cheese',name:'Chipotle — Cheese', emoji:'🧀', serving:'1 scoop (1oz)', cal:110, p:6, c:1, f:9, tags:['chipotle'] },
+
+    // --- Ground beef by lean ratio (per 4 oz raw, as labeled on the pack) ---
+    { id:'gb_937', name:'Ground Beef 93/7', emoji:'🥩', serving:'4 oz raw', cal:170, p:22, c:0, f:8,  tags:['ground beef','beef','protein','lean'] },
+    { id:'gb_9010',name:'Ground Beef 90/10', emoji:'🥩', serving:'4 oz raw', cal:200, p:23, c:0, f:11, tags:['ground beef','beef','protein'] },
+    { id:'gb_8515',name:'Ground Beef 85/15', emoji:'🥩', serving:'4 oz raw', cal:240, p:21, c:0, f:17, tags:['ground beef','beef','protein'] },
+    { id:'gb_8020',name:'Ground Beef 80/20', emoji:'🥩', serving:'4 oz raw', cal:290, p:19, c:0, f:23, tags:['ground beef','beef','protein'] },
+    { id:'gt_937', name:'Ground Turkey 93/7', emoji:'🦃', serving:'4 oz raw', cal:170, p:22, c:0, f:9,  tags:['ground turkey','turkey','protein','lean'] },
+    { id:'gt_991', name:'Ground Turkey 99/1 (breast)', emoji:'🦃', serving:'4 oz raw', cal:120, p:26, c:0, f:2, tags:['ground turkey','turkey','protein','lean'] },
+
+    // --- More common staples ---
+    { id:'milk2',  name:'2% Milk', emoji:'🥛', serving:'1 cup', cal:122, p:8, c:12, f:5, tags:['dairy','drink'] },
+    { id:'milkskim',name:'Skim Milk', emoji:'🥛', serving:'1 cup', cal:83, p:8, c:12, f:0, tags:['dairy','drink'] },
+    { id:'eggwhite',name:'Egg Whites', emoji:'🥚', serving:'1/2 cup (4 whites)', cal:65, p:13, c:1, f:0, tags:['protein','breakfast','lean'] },
+    { id:'cottage',name:'Cottage Cheese (low-fat)', emoji:'🧀', serving:'1 cup', cal:180, p:24, c:8, f:5, tags:['protein','dairy'] },
+    { id:'brice',  name:'Brown Rice (cooked)', emoji:'🍚', serving:'1 cup', cal:215, p:5, c:45, f:1.8, tags:['carbs'] },
+    { id:'chthigh',name:'Chicken Thigh (cooked)', emoji:'🍗', serving:'6 oz', cal:310, p:46, c:0, f:13, tags:['protein'] },
+    { id:'sirloin',name:'Sirloin Steak', emoji:'🥩', serving:'6 oz', cal:330, p:46, c:0, f:15, tags:['protein','beef'] },
+    { id:'tuna',   name:'Canned Tuna (in water)', emoji:'🐟', serving:'1 can (5 oz)', cal:120, p:26, c:0, f:1, tags:['protein','lean'] },
+    { id:'bacon',  name:'Bacon', emoji:'🥓', serving:'2 slices', cal:80, p:6, c:0, f:6, tags:['protein','fat'] },
   ];
 
   const foodById = {};
