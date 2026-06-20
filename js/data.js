@@ -152,5 +152,61 @@ App.DATA = (function () {
   const RATIOS = {};
   Object.values(E).forEach(ex => { if (ex.ratio) RATIOS[ex.key] = { ratio:ex.ratio, anchor:ex.anchor, name:ex.name }; });
 
-  return { FOODS, foodById, E, DAYS, SCHEDULE, phaseForWeek, repScheme, RATIOS };
+  /* ---------- EXERCISE LIBRARY (for swapping / adding / cardio) ---------- */
+  // Cardio / conditioning options the user can swap in or dial up/down.
+  const CARDIO = {
+    inclineWalk:{ key:'inclineWalk', name:'Incline Treadmill / Stair Climb', type:'cond', sets:1, reps:'30–45 min @ 12%' },
+    ruck:       { key:'ruck',        name:'Weighted Ruck / Hike Prep',       type:'cond', sets:1, reps:'45–60 min w/ pack' },
+    abWheel2:   { key:'abWheel2',    name:'Ab Wheel Rollout',                type:'abs',  sets:3, reps:'10–12' },
+    stairmaster:{ key:'stairmaster', name:'StairMaster',                     type:'cond', sets:1, reps:'20–30 min' },
+    bikeZ2:     { key:'bikeZ2',      name:'Stationary Bike (Zone 2)',        type:'cond', sets:1, reps:'30–40 min easy' },
+    rowInt:     { key:'rowInt',      name:'Rowing Intervals',                type:'cond', sets:1, reps:'8 × 250m' },
+    jogEasy:    { key:'jogEasy',     name:'Easy Jog',                        type:'cond', sets:1, reps:'20–30 min' },
+    jumpRope:   { key:'jumpRope',    name:'Jump Rope',                       type:'cond', sets:1, reps:'10–15 min' },
+  };
+  // Extra strength alternatives for swapping.
+  const EXTRA = {
+    dbBench:     { key:'dbBench',     name:'Flat Dumbbell Press',  type:'main', sets:4 },
+    weightedDip: { key:'weightedDip', name:'Weighted Dips',        type:'main', sets:3 },
+    cableFly:    { key:'cableFly',    name:'Cable Fly',            type:'acc',  sets:3 },
+    hackSquat:   { key:'hackSquat',   name:'Hack Squat',           type:'main', sets:4 },
+    legExt:      { key:'legExt',      name:'Leg Extension',        type:'acc',  sets:3 },
+    hipThrust:   { key:'hipThrust',   name:'Barbell Hip Thrust',   type:'main', sets:3 },
+    walkLunge:   { key:'walkLunge',   name:'Walking Lunge',        type:'acc',  sets:3 },
+    cableLat:    { key:'cableLat',    name:'Cable Lateral Raise',  type:'acc',  sets:3 },
+    rearDelt:    { key:'rearDelt',    name:'Rear Delt Fly',        type:'acc',  sets:3 },
+    hammerCurl:  { key:'hammerCurl',  name:'Hammer Curl',          type:'acc',  sets:3 },
+    ropePush:    { key:'ropePush',    name:'Rope Pushdown',        type:'acc',  sets:3 },
+    preacher:    { key:'preacher',    name:'Preacher Curl',        type:'acc',  sets:3 },
+    tbar:        { key:'tbar',        name:'T-Bar Row',            type:'main', sets:3 },
+    seatedRow:   { key:'seatedRow',   name:'Seated Cable Row',     type:'acc',  sets:3 },
+    russian:     { key:'russian',     name:'Russian Twist',        type:'abs',  sets:3, reps:'15–20' },
+    deadbug:     { key:'deadbug',     name:'Dead Bug',             type:'abs',  sets:3, reps:'10–12' },
+  };
+
+  // Master lookup of everything selectable, keyed.
+  const ALL = Object.assign({}, E, EXTRA, CARDIO);
+
+  // Category for the picker.
+  const CAT = {
+    inclineBB:'Chest', flatBench:'Chest', inclineDB:'Chest', dbBench:'Chest', weightedDip:'Chest', cableFly:'Chest',
+    ohp:'Shoulders', lateral:'Shoulders', facepull:'Shoulders', cableLat:'Shoulders', rearDelt:'Shoulders',
+    pullup:'Back', latPull:'Back', bbRow:'Back', csRow:'Back', tbar:'Back', seatedRow:'Back',
+    bbCurl:'Arms', inclineCurl:'Arms', pushdown:'Arms', skull:'Arms', hammerCurl:'Arms', ropePush:'Arms', preacher:'Arms',
+    squat:'Legs', frontSquat:'Legs', rdl:'Legs', legPress:'Legs', bulgarian:'Legs', legCurl:'Legs',
+    calfStand:'Legs', calfSeat:'Legs', hackSquat:'Legs', legExt:'Legs', hipThrust:'Legs', walkLunge:'Legs',
+    boxJump:'Power', broadJump:'Power',
+    legRaise:'Core', cableCrunch:'Core', plank:'Core', abWheel:'Core', abWheel2:'Core', russian:'Core', deadbug:'Core',
+    inclineWalk:'Cardio', ruck:'Cardio', stairmaster:'Cardio', bikeZ2:'Cardio', rowInt:'Cardio', jogEasy:'Cardio', jumpRope:'Cardio',
+  };
+  Object.keys(ALL).forEach(k => { ALL[k].cat = CAT[k] || 'Other'; });
+
+  const CAT_ORDER = ['Chest','Back','Shoulders','Arms','Legs','Core','Power','Cardio','Other'];
+  function exLibrary() {
+    const groups = {};
+    Object.values(ALL).forEach(ex => { (groups[ex.cat] = groups[ex.cat] || []).push(ex); });
+    return CAT_ORDER.filter(c => groups[c]).map(c => ({ cat:c, items:groups[c] }));
+  }
+
+  return { FOODS, foodById, E, DAYS, SCHEDULE, phaseForWeek, repScheme, RATIOS, ALL, exLibrary, CAT_ORDER };
 })();

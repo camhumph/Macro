@@ -79,6 +79,7 @@ App.Food = (function () {
     container.querySelector('#food-scan').onclick = () => App.Scan.scanLabel();
     container.querySelector('#food-photo').onclick = () => photoSheet();
     App.Scan.wirePantry(container);
+    container.querySelectorAll('[data-edit]').forEach(el => el.onclick = () => editEntrySheet(el.dataset.edit));
     container.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       Store.removeFood(b.dataset.del);
       page(container);
@@ -90,14 +91,48 @@ App.Food = (function () {
     const thumb = e.photo ? `<img src="${e.photo}" alt="">` : (e.emoji || '🍴');
     return `
     <div class="food-item">
-      <div class="food-thumb">${thumb}</div>
-      <div class="fi-main">
-        <b>${UI.esc(e.name)}</b>
+      <div class="food-thumb" data-edit="${e.id}">${thumb}</div>
+      <div class="fi-main" data-edit="${e.id}">
+        <b>${UI.esc(e.name)} <span class="faint" style="font-weight:500;font-size:12px">✎</span></b>
         <small>${UI.esc(e.qtyLabel || '')} · P${UI.round(e.protein)} C${UI.round(e.carbs)} F${UI.round(e.fat)}</small>
       </div>
-      <div class="fi-cal">${UI.round(e.cal)}<small>cal</small></div>
+      <div class="fi-cal" data-edit="${e.id}">${UI.round(e.cal)}<small>cal</small></div>
       <button class="icon-btn" data-del="${e.id}" style="width:30px;height:30px;color:var(--faint);font-size:18px">×</button>
     </div>`;
+  }
+
+  /* ---------- edit an already-logged entry ---------- */
+  function editEntrySheet(entryId) {
+    const e = Store.foodLog().find(x => x.id === entryId);
+    if (!e) return;
+    UI.modal(`
+      <h2>Edit entry</h2>
+      ${UI.field('Name', `<input class="input" id="ee-name" value="${UI.esc(e.name)}">`)}
+      ${UI.field('Amount / note', `<input class="input" id="ee-qty" value="${UI.esc(e.qtyLabel || '')}" placeholder="e.g. 1 serving">`)}
+      <div class="inline-fields" style="margin-bottom:10px">
+        <div class="field" style="margin:0"><label>Cal</label><input class="input" id="ee-cal" type="number" inputmode="numeric" value="${UI.round(e.cal)}"></div>
+        <div class="field" style="margin:0"><label>Protein</label><input class="input" id="ee-p" type="number" inputmode="decimal" value="${UI.round(e.protein)}"></div>
+        <div class="field" style="margin:0"><label>Carbs</label><input class="input" id="ee-c" type="number" inputmode="decimal" value="${UI.round(e.carbs)}"></div>
+        <div class="field" style="margin:0"><label>Fat</label><input class="input" id="ee-f" type="number" inputmode="decimal" value="${UI.round(e.fat)}"></div>
+      </div>
+      ${UI.field('Meal', mealSelect(e.meal))}
+      <button class="btn primary" id="ee-save">Save changes</button>
+      <button class="btn ghost danger" id="ee-del" style="margin-top:10px">Delete entry</button>
+    `, (m, close) => {
+      m.querySelector('#ee-save').onclick = () => {
+        Store.updateFood(entryId, {
+          name: m.querySelector('#ee-name').value.trim() || e.name,
+          qtyLabel: m.querySelector('#ee-qty').value.trim(),
+          meal: m.querySelector('#q-meal').value,
+          cal: +m.querySelector('#ee-cal').value || 0,
+          protein: +m.querySelector('#ee-p').value || 0,
+          carbs: +m.querySelector('#ee-c').value || 0,
+          fat: +m.querySelector('#ee-f').value || 0,
+        });
+        close(); App.Router.refresh(); UI.toast('Updated ✅', 'good');
+      };
+      m.querySelector('#ee-del').onclick = () => { Store.removeFood(entryId); close(); App.Router.refresh(); UI.toast('Removed'); };
+    });
   }
 
   /* ---------- search sheet ---------- */
@@ -155,6 +190,9 @@ App.Food = (function () {
       <h2>${UI.esc(food.name)}</h2>
       <p class="muted" style="margin:-8px 0 16px">${UI.esc(food.serving)} · ${food.cal} cal</p>
       ${UI.field('Servings', `<input class="input" id="q-amt" type="number" inputmode="decimal" value="1" step="0.25" min="0">`)}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 14px">
+        ${[['¼',0.25],['½',0.5],['¾',0.75],['1',1],['2',2]].map(([l,v]) => `<button class="btn small" data-q="${v}">${l}</button>`).join('')}
+      </div>
       ${UI.field('Meal', mealSelect(presetMeal))}
       <div class="card" id="q-preview" style="margin-bottom:14px"></div>
       <button class="btn primary" id="q-add">Add to Log</button>
@@ -166,6 +204,7 @@ App.Food = (function () {
         preview.innerHTML = `<div class="spread"><b>${UI.round(food.cal*n)} cal</b>
           <span class="muted">P ${UI.round(food.p*n)} · C ${UI.round(food.c*n)} · F ${UI.round(food.f*n)}</span></div>`;
       };
+      m.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { amt.value = b.dataset.q; upd(); });
       amt.addEventListener('input', upd); upd();
       m.querySelector('#q-add').onclick = () => {
         const n = parseFloat(amt.value) || 0;

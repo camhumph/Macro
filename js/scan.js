@@ -146,8 +146,9 @@ App.Scan = (function () {
         <div class="field" style="margin:0"><label>Fat</label><input class="input" id="r-f" type="number" inputmode="decimal" value="${p.f??''}"></div>
       </div>
       <div class="card" id="r-pack" style="margin:6px 0 14px"></div>
-      <button class="btn primary" id="r-save">Save to My Foods</button>
-      <button class="btn ghost" id="r-savelog" style="margin-top:10px">Save & log a portion now</button>
+      <button class="btn primary" id="r-logone">✓ Looks good — log 1 serving</button>
+      <button class="btn" id="r-savelog" style="margin-top:10px">Pick a portion (¼–full pack)</button>
+      <button class="btn ghost" id="r-save" style="margin-top:10px">Save to My Foods only</button>
     `, (m, close) => {
       const read = () => {
         const ss = m.querySelector('#r-ss').value.trim();
@@ -175,7 +176,8 @@ App.Scan = (function () {
       m.querySelectorAll('input').forEach(i => i.addEventListener('input', drawPack));
       drawPack();
 
-      const commit = (thenLog) => {
+      // mode: 'logone' (accept & log 1 serving), 'portion' (pick amount), 'save' (just save)
+      const commit = (mode) => {
         const d = read();
         if (!d.name) return UI.toast('Name your food first');
         if (!d.perServing.cal) return UI.toast('Enter calories');
@@ -184,13 +186,33 @@ App.Scan = (function () {
           perServing:d.perServing, totalServings:d.servingsPerContainer, remainingServings:d.servingsPerContainer,
         });
         close();
+        if (mode === 'portion') { App.Router.refresh(); portionSheet(item.id); return; }
+        if (mode === 'logone') {
+          logServings(item, 1);
+          App.Router.refresh();
+          UI.toast('Logged 1 serving 🏷️', 'good');
+          return;
+        }
         App.Router.refresh();
-        if (thenLog) portionSheet(item.id);
-        else UI.toast('Saved to My Foods ✅', 'good');
+        UI.toast('Saved to My Foods ✅', 'good');
       };
-      m.querySelector('#r-save').onclick = () => commit(false);
-      m.querySelector('#r-savelog').onclick = () => commit(true);
+      m.querySelector('#r-logone').onclick = () => commit('logone');
+      m.querySelector('#r-savelog').onclick = () => commit('portion');
+      m.querySelector('#r-save').onclick = () => commit('save');
     });
+  }
+
+  // Log N servings of a pantry item and decrement what's left in the pack.
+  function logServings(item, s) {
+    const pv = item.perServing;
+    const grams = item.servingGrams ? UI.round(s * item.servingGrams) : null;
+    Store.addFood({
+      name: item.name, emoji: '🏷️',
+      qtyLabel: grams != null ? `${grams} g (${UI.round(s*100)/100} serv)` : `${UI.round(s*100)/100} × ${item.servingSizeText || 'serving'}`,
+      cal: pv.cal*s, protein: pv.p*s, carbs: pv.c*s, fat: pv.f*s,
+    });
+    const cur = Store.pantry().find(p => p.id === item.id) || item;
+    Store.updatePantry(item.id, { remainingServings: Math.max(0, cur.remainingServings - s) });
   }
 
   /* ---------- log a portion (decrements remaining in the pack) ---------- */
@@ -208,9 +230,11 @@ App.Scan = (function () {
       ${hasG ? `<div class="segment" id="p-mode"><button data-mode="weight" class="on">By weight</button><button data-mode="serv">By servings</button></div>` : ''}
       <div id="p-amtwrap"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 12px">
-        <button class="btn small" data-chip="0.5">½ serving</button>
-        <button class="btn small" data-chip="1">1 serving</button>
-        <button class="btn small" data-chip="2">2 servings</button>
+        <button class="btn small" data-chip="0.25">¼</button>
+        <button class="btn small" data-chip="0.5">½</button>
+        <button class="btn small" data-chip="0.75">¾</button>
+        <button class="btn small" data-chip="1">1</button>
+        <button class="btn small" data-chip="2">2</button>
         <button class="btn small" data-chip="rest">Rest of pack</button>
       </div>
       <div class="card" id="p-preview" style="margin-bottom:14px"></div>
@@ -257,14 +281,7 @@ App.Scan = (function () {
       m.querySelector('#p-log').onclick = () => {
         const s = servingsUsed();
         if (s <= 0) return UI.toast('Enter an amount');
-        const pv = item.perServing;
-        const grams = hasG ? UI.round(s * item.servingGrams) : null;
-        Store.addFood({
-          name:item.name, emoji:'🏷️',
-          qtyLabel: grams != null ? `${grams} g (${UI.round(s*100)/100} serv)` : `${UI.round(s*100)/100} × ${item.servingSizeText || 'serving'}`,
-          cal:pv.cal*s, protein:pv.p*s, carbs:pv.c*s, fat:pv.f*s,
-        });
-        Store.updatePantry(item.id, { remainingServings: Math.max(0, item.remainingServings - s) });
+        logServings(item, s);
         close();
         App.Router.refresh();
         UI.toast('Portion logged 🏷️', 'good');
@@ -308,5 +325,5 @@ App.Scan = (function () {
     });
   }
 
-  return { scanLabel, portionSheet, reviewSheet, parseLabel, pantryRows, wirePantry };
+  return { scanLabel, portionSheet, reviewSheet, parseLabel, pantryRows, wirePantry, logServings };
 })();

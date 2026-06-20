@@ -32,6 +32,7 @@ App.Store = (function () {
       foodLogs:{},     // dateKey -> [ entries ]
       weightLogs:[],   // [ { date, weight } ] sorted by date
       pantry:[],       // scanned/saved foods you draw portions from
+      programOverrides:{}, // dayType -> [ {key, sets, custom?} ] custom routine
       lastAdjustWeek:0 // last week we auto-adjusted calories
     };
   }
@@ -113,6 +114,12 @@ App.Store = (function () {
     save();
     return entry;
   }
+  function updateFood(entryId, patch, dateKey) {
+    dateKey = dateKey || todayKey();
+    const e = (state.foodLogs[dateKey] || []).find(x => x.id === entryId);
+    if (e) { Object.assign(e, patch); save(); }
+    return e;
+  }
   function removeFood(entryId, dateKey) {
     dateKey = dateKey || todayKey();
     const arr = state.foodLogs[dateKey] || [];
@@ -146,6 +153,11 @@ App.Store = (function () {
     save();
   }
 
+  /* ---------- program overrides (custom routine per day type) ---------- */
+  function getProgramOverride(dayType) { return state.programOverrides[dayType] || null; }
+  function setProgramOverride(dayType, list) { state.programOverrides[dayType] = list; save(); }
+  function clearProgramOverride(dayType) { delete state.programOverrides[dayType]; save(); }
+
   /* ---------- workouts ---------- */
   function workoutLog(dateKey) {
     dateKey = dateKey || todayKey();
@@ -177,8 +189,9 @@ App.Store = (function () {
     KEY, todayKey, get, save, profile, setProfile,
     weekFor, daysUntilClimb, daysIntoProgram, dayDiff,
     logWeight, weightToday, latestWeight,
-    foodLog, addFood, removeFood, dayTotals,
+    foodLog, addFood, updateFood, removeFood, dayTotals,
     pantry, addPantry, updatePantry, removePantry,
+    getProgramOverride, setProgramOverride, clearProgramOverride,
     workoutLog, saveWorkout, exerciseHistory,
     resetAll,
   };
