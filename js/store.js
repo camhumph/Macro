@@ -4,7 +4,8 @@
 window.App = window.App || {};
 
 App.Store = (function () {
-  const KEY = 'macro_state_v1';
+  const KEY = 'macro_state_v1';      // legacy single-profile key (migrated)
+  const APP_KEY = 'macro_app_v1';    // multi-profile container
 
   function todayKey(d) {
     d = d || new Date();
@@ -12,12 +13,16 @@ App.Store = (function () {
     return `${y}-${m}-${day}`;
   }
 
+  const AVATARS = ['💪','🔥','⚡','🦍','🐺','🦅','🏔️','🚀','🥇','😤','🦬','🐉'];
+  const COLORS  = ['#c6ff3a','#ff7a3c','#3ad0ff','#ff5d73','#41d693','#b18cff','#ffd23c','#ff4fa3'];
+
   function defaultState() {
     const start = todayKey();
     return {
       onboarded:false,
       profile:{
         name:'Athlete',
+        emoji:'💪', color:'#c6ff3a',
         heightIn:72,            // 6'0"
         startWeight:150,
         startDate:start,
@@ -37,24 +42,38 @@ App.Store = (function () {
     };
   }
 
-  let state = load();
+  function mergeProfile(parsed) {
+    const d = defaultState();
+    return Object.assign(d, parsed, { profile: Object.assign(d.profile, parsed.profile || {}) });
+  }
 
-  function load() {
+  // multi-profile container { v, activeId, order:[id], profiles:{ id: state } }
+  let container = loadContainer();
+  let state = container.profiles[container.activeId];
+
+  function loadContainer() {
     try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      // shallow-merge to survive added fields across versions
-      const d = defaultState();
-      return Object.assign(d, parsed, { profile: Object.assign(d.profile, parsed.profile || {}) });
-    } catch (e) {
-      console.warn('state load failed', e);
-      return defaultState();
-    }
+      const rawApp = localStorage.getItem(APP_KEY);
+      if (rawApp) {
+        const c = JSON.parse(rawApp);
+        Object.keys(c.profiles).forEach(id => { c.profiles[id] = mergeProfile(c.profiles[id]); });
+        if (!c.order) c.order = Object.keys(c.profiles);
+        if (!c.profiles[c.activeId]) c.activeId = c.order[0];
+        return c;
+      }
+      const rawOld = localStorage.getItem(KEY);    // migrate legacy single profile
+      if (rawOld) {
+        const old = mergeProfile(JSON.parse(rawOld));
+        const id = 'p' + Date.now();
+        return { v:1, activeId:id, order:[id], profiles:{ [id]:old } };
+      }
+    } catch (e) { console.warn('container load failed', e); }
+    const id = 'p1';
+    return { v:1, activeId:id, order:[id], profiles:{ [id]: defaultState() } };
   }
 
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    try { localStorage.setItem(APP_KEY, JSON.stringify(container)); }
     catch (e) { console.warn('save failed', e); }
   }
 
@@ -62,6 +81,51 @@ App.Store = (function () {
   function profile() { return state.profile; }
 
   function setProfile(patch) { Object.assign(state.profile, patch); save(); }
+
+  /* ---------- profile management ---------- */
+  function profiles() {
+    return container.order.map(id => {
+      const p = container.profiles[id].profile;
+      return { id, name:p.name, emoji:p.emoji || '💪', color:p.color || '#c6ff3a', active:id === container.activeId };
+    });
+  }
+  function activeId() { return container.activeId; }
+  function switchProfile(id) {
+    if (container.profiles[id]) { container.activeId = id; state = container.profiles[id]; save(); }
+  }
+  function createProfile(name, emoji, color) {
+    const id = 'p' + Date.now();
+    const st = defaultState();
+    st.profile.name = name || 'Athlete';
+    st.profile.emoji = emoji || AVATARS[container.order.length % AVATARS.length];
+    st.profile.color = color || COLORS[container.order.length % COLORS.length];
+    container.profiles[id] = st; container.order.push(id); container.activeId = id; state = st; save();
+    return id;
+  }
+  function updateProfileMeta(id, patch) {
+    const st = container.profiles[id];
+    if (st) { Object.assign(st.profile, patch); save(); }
+  }
+  function deleteProfile(id) {
+    if (container.order.length <= 1) return false;
+    delete container.profiles[id];
+    container.order = container.order.filter(x => x !== id);
+    if (container.activeId === id) { container.activeId = container.order[0]; state = container.profiles[container.activeId]; }
+    save(); return true;
+  }
+  function importAsNewProfile(obj) {
+    const st = mergeProfile(obj); st.onboarded = true;
+    const id = 'p' + Date.now();
+    container.profiles[id] = st; container.order.push(id); save();
+    return id;
+  }
+  // [{ id, meta:{name,emoji,color}, state }] for leaderboard computation
+  function allProfilesData() {
+    return container.order.map(id => {
+      const p = container.profiles[id].profile;
+      return { id, meta:{ name:p.name, emoji:p.emoji || '💪', color:p.color || '#c6ff3a' }, state:container.profiles[id] };
+    });
+  }
 
   /* ---------- program timing ---------- */
   function dayDiff(a, b) {
@@ -183,13 +247,18 @@ App.Store = (function () {
     return out;
   }
 
-  function resetAll() { state = defaultState(); save(); }
+  // Reset the ACTIVE profile back to a fresh state.
+  function resetAll() {
+    state = defaultState();
+    container.profiles[container.activeId] = state;
+    save();
+  }
 
-  // Replace all data from a backup object (used by Import).
+  // Replace the ACTIVE profile's data from a backup object (used by Restore).
   function importState(obj) {
     if (!obj || typeof obj !== 'object' || !obj.profile) throw new Error('Not a valid Macro backup');
-    const d = defaultState();
-    state = Object.assign(d, obj, { profile: Object.assign(d.profile, obj.profile || {}) });
+    state = mergeProfile(obj);
+    container.profiles[container.activeId] = state;
     save();
   }
 
@@ -199,7 +268,8 @@ App.Store = (function () {
   }
 
   return {
-    KEY, todayKey, get, save, profile, setProfile,
+    KEY, APP_KEY, AVATARS, COLORS, todayKey, get, save, profile, setProfile,
+    profiles, activeId, switchProfile, createProfile, updateProfileMeta, deleteProfile, importAsNewProfile, allProfilesData,
     weekFor, daysUntilClimb, daysIntoProgram, dayDiff,
     logWeight, weightToday, latestWeight,
     foodLog, addFood, updateFood, removeFood, dayTotals,

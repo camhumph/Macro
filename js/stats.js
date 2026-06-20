@@ -7,13 +7,16 @@ App.Stats = (function () {
   const { DATA } = App;
   const Store = App.Store, UI = App.UI, W = App.Workout;
 
+  let startSeg = 'strength';
+  function open(seg) { startSeg = seg; App.Router.go('stats'); }
+
   function page(container) {
-    const lifts = W.estimatedLifts();
     container.innerHTML = `
       <div class="segment" id="st-seg">
-        <button data-seg="strength" class="on">Strength</button>
+        <button data-seg="strength">Strength</button>
         <button data-seg="predict">Predict</button>
-        <button data-seg="program">Program</button>
+        <button data-seg="compete">Compete</button>
+        <button data-seg="program">Plan</button>
       </div>
       <div id="st-body"></div>
     `;
@@ -23,10 +26,12 @@ App.Stats = (function () {
       seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.seg === which));
       if (which === 'strength') strength(body);
       else if (which === 'predict') predict(body);
+      else if (which === 'compete') App.Leaderboard.render(body);
       else program(body);
     };
     seg.querySelectorAll('button').forEach(b => b.onclick = () => show(b.dataset.seg));
-    show('strength');
+    show(startSeg);
+    startSeg = 'strength';
   }
 
   /* ---------- Strength: estimated 1RM table ---------- */
@@ -124,5 +129,5 @@ App.Stats = (function () {
       </div>`;
   }
 
-  return { page };
+  return { page, open };
 })();

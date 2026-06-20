@@ -85,6 +85,8 @@ window.App = window.App || {};
         <button class="btn small ghost" id="db-food" style="width:100%;margin-top:14px">Open food log ▸</button>
       </div>
 
+      ${App.Leaderboard.streakCard()}
+
       <div class="section-title"><h2>Today's Session</h2><span class="link" id="db-stats">Stats ▸</span></div>
       <div id="db-workout"></div>
     `;
@@ -95,6 +97,8 @@ window.App = window.App || {};
     if (wb) wb.onclick = () => Router.go('weight');
     view.querySelector('#db-food').onclick = () => Router.go('food');
     view.querySelector('#db-stats').onclick = () => Router.go('stats');
+    const sc = view.querySelector('#streak-compete');
+    if (sc) sc.onclick = () => App.Stats.open('compete');
   }
 
   /* ---------- Settings sheet ---------- */
@@ -276,9 +280,20 @@ window.App = window.App || {};
   }
 
   function setProfileInitial() {
-    const n = (Store.profile().name || '?').trim();
-    document.getElementById('profile-initial').textContent = (n[0] || '?').toUpperCase();
+    const p = Store.profile();
+    const el = document.getElementById('profile-initial');
+    el.textContent = p.emoji || (p.name || '?').trim()[0].toUpperCase();
+    const btn = document.getElementById('profile-btn');
+    btn.style.borderColor = p.color || 'var(--line)';
   }
+
+  // expose for other modules
+  App.openSettings = settings;
+  App.afterProfileChange = () => {
+    setProfileInitial();
+    App.Reminders.start();
+    Router.go('today');
+  };
 
   /* ---------- boot ---------- */
   function boot() {
@@ -290,7 +305,7 @@ window.App = window.App || {};
         Router.go(r);
       };
     });
-    document.getElementById('profile-btn').onclick = settings;
+    document.getElementById('profile-btn').onclick = () => App.Profiles.switcher();
 
     Store.requestPersist();   // ask iOS/Safari to keep our data durable
     Router.go('today');
