@@ -56,6 +56,12 @@ App.Food = (function () {
       </div>
     `;
 
+    // Water tracker
+    html += waterCard();
+
+    // Saved meals (quick add)
+    html += mealsRow();
+
     // My Foods / pantry (scanned items you draw portions from)
     html += App.Scan.pantryRows();
 
@@ -71,8 +77,10 @@ App.Food = (function () {
         </div>`;
     }).join('');
 
-    if (!log.length) {
-      html += `<div class="empty"><div class="big">🍳</div>Nothing logged yet.<br>Start with the <b>Mass Breakfast Shake</b>.</div>`;
+    if (log.length) {
+      html += `<button class="btn ghost small" id="food-savemeal" style="width:100%;margin-top:14px">💾 Save today's foods as a meal</button>`;
+    } else {
+      html += `<div class="empty"><div class="big">🍽️</div>Nothing logged yet.<br>Add a food, scan a barcode, or pick a saved meal.</div>`;
     }
 
     container.innerHTML = html;
@@ -81,12 +89,85 @@ App.Food = (function () {
     container.querySelector('#food-barcode').onclick = () => App.Barcode.scan();
     container.querySelector('#food-scan').onclick = () => App.Scan.scanLabel();
     container.querySelector('#food-photo').onclick = () => photoSheet();
+    // water
+    container.querySelectorAll('[data-water]').forEach(b => b.onclick = () => { Store.addWater(+b.dataset.water); page(container); });
+    // meals
+    container.querySelectorAll('[data-meal]').forEach(b => b.onclick = () => { logMeal(b.dataset.meal); page(container); UI.toast('Meal logged', 'good'); });
+    container.querySelectorAll('[data-mealdel]').forEach(b => b.onclick = (e) => { e.stopPropagation(); Store.removeMeal(b.dataset.mealdel); page(container); });
+    const sm = container.querySelector('#food-savemeal');
+    if (sm) sm.onclick = () => saveMealSheet(container);
     App.Scan.wirePantry(container);
     container.querySelectorAll('[data-edit]').forEach(el => el.onclick = () => editEntrySheet(el.dataset.edit));
     container.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       Store.removeFood(b.dataset.del);
       page(container);
       UI.toast('Removed');
+    });
+  }
+
+  /* ---------- water ---------- */
+  function waterCard() {
+    const cups = Store.water();
+    const goal = Store.profile().waterGoal || 8;
+    const pct = UI.clamp(cups / goal * 100, 0, 100);
+    return `
+    <div class="card" style="margin-top:14px">
+      <div class="spread" style="margin-bottom:10px">
+        <b>💧 Water</b>
+        <span class="muted">${cups} / ${goal} cups</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:var(--fat)"></div></div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn small" data-water="-1">− cup</button>
+        <button class="btn small" data-water="1">＋ cup</button>
+        <button class="btn small" data-water="2">＋ 2</button>
+      </div>
+    </div>`;
+  }
+
+  /* ---------- saved meals ---------- */
+  function mealsRow() {
+    const meals = Store.meals();
+    if (!meals.length) return '';
+    return `
+      <div class="meal-head"><b>Saved Meals</b><span>tap to log</span></div>
+      <div class="card" style="padding:6px 16px">
+        ${meals.map(m => {
+          const t = m.items.reduce((s, e) => s + (e.cal || 0), 0);
+          return `<div class="food-item">
+            <div class="food-thumb" data-meal="${m.id}">${m.emoji || '🍱'}</div>
+            <div class="fi-main" data-meal="${m.id}"><b>${UI.esc(m.name)}</b><small>${m.items.length} items · ${UI.round(t)} cal</small></div>
+            <button class="btn small primary" data-meal="${m.id}" style="width:auto">Log</button>
+            <button class="icon-btn" data-mealdel="${m.id}" style="width:30px;height:30px;color:var(--faint);font-size:18px">×</button>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+  function logMeal(id) {
+    const m = Store.meals().find(x => x.id === id);
+    if (!m) return;
+    const meal = mealSlot();
+    m.items.forEach(it => Store.addFood({ ...it, meal }));
+  }
+  function mealSlot() {
+    const h = new Date().getHours();
+    return h < 11 ? 'Breakfast' : h < 15 ? 'Lunch' : h < 21 ? 'Dinner' : 'Snacks';
+  }
+  function saveMealSheet(container) {
+    const items = Store.foodLog();
+    if (!items.length) return UI.toast('Log some foods first');
+    UI.modal(`
+      <h2>Save as a meal</h2>
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Saves today's ${items.length} logged foods as a reusable meal you can add in one tap.</p>
+      ${UI.field('Meal name', `<input class="input" id="sm-name" placeholder="e.g. My usual breakfast">`)}
+      <button class="btn primary" id="sm-go">Save meal</button>
+    `, (m, close) => {
+      m.querySelector('#sm-go').onclick = () => {
+        const name = m.querySelector('#sm-name').value.trim();
+        if (!name) return UI.toast('Name it first');
+        Store.addMeal(name, items.map(e => ({ name:e.name, emoji:e.emoji, qtyLabel:e.qtyLabel, cal:e.cal, protein:e.protein, carbs:e.carbs, fat:e.fat })));
+        close(); page(container); UI.toast('Meal saved', 'good');
+      };
     });
   }
 

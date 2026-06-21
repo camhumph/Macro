@@ -1,8 +1,8 @@
 /* Macro — service worker: offline cache (cache-first for app shell) */
-const CACHE = 'macro-v10';
+const CACHE = 'macro-v11';
 const ASSETS = [
   './', './index.html', './styles.css', './manifest.json',
-  './js/data.js', './js/store.js', './js/goals.js', './js/ui.js', './js/workout.js',
+  './js/data.js', './js/store.js', './js/goals.js', './js/ui.js', './js/timer.js', './js/workout.js',
   './js/food.js', './js/scan.js', './js/barcode.js', './js/weight.js', './js/reminders.js',
   './js/leaderboard.js', './js/profiles.js', './js/stats.js', './js/app.js',
   './icons/icon.svg'

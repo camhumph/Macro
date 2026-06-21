@@ -245,6 +245,28 @@ a{color:var(--accent-3)}
 .bc-line{position:absolute;left:0;right:0;height:2px;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:bcScan 1.8s ease-in-out infinite}
 @keyframes bcScan{0%{top:4%}50%{top:94%}100%{top:4%}}
 
+/* ---------- Rest timer ---------- */
+.rest-timer{position:fixed;left:12px;right:12px;bottom:calc(var(--tab-h) + var(--safe-b) + 12px);z-index:70;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:16px;background:linear-gradient(135deg,#1c1f28,#16181f);border:1px solid var(--accent);box-shadow:var(--shadow);max-width:660px;margin:0 auto}
+.rest-timer .rt-mid{flex:1;text-align:center;display:flex;flex-direction:column;line-height:1}
+.rest-timer .rt-mid b{font-size:24px;font-weight:800;letter-spacing:-.5px;color:var(--accent)}
+.rest-timer .rt-mid span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+.rest-timer .rt-btn{background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-weight:700;font-size:13px;color:var(--text)}
+.rest-timer .rt-skip{background:var(--accent);color:#0c0d10;border:none;border-radius:10px;padding:8px 14px;font-weight:800;font-size:13px}
+
+/* ---------- PR + rank ---------- */
+.set-row.pr .mini{border-color:var(--accent)}
+.set-row.pr .set-no{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#0c0d10}
+.rank-bar{margin-top:12px}
+.rank-chip{font-size:12px;font-weight:800;padding:3px 10px;border-radius:999px;background:var(--card-2);border:1px solid var(--line)}
+.rank-chip.rk0{color:var(--faint)}
+.rank-chip.rk1{color:#9aa3b2}
+.rank-chip.rk2{color:var(--accent-3)}
+.rank-chip.rk3{color:var(--good)}
+.rank-chip.rk4{color:var(--accent)}
+.rank-chip.rk5{color:var(--accent-2);border-color:rgba(255,122,60,.5);background:rgba(255,122,60,.12)}
+.segment.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.segment.scroll button{flex:0 0 auto;padding-left:14px;padding-right:14px}
+
 /* ---------- Goals & plan ---------- */
 .goal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .goal-chip{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:14px;border-radius:14px;background:var(--card);border:1.5px solid var(--line);text-align:left}

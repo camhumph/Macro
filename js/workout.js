@@ -175,8 +175,8 @@ App.Workout = (function () {
         </div>`;
     } else {
       inner = ex.sets.map((s, si) => `
-        <div class="set-row">
-          <div class="set-no">${si + 1}</div>
+        <div class="set-row ${s.pr ? 'pr' : ''}">
+          <div class="set-no">${s.pr ? '🏆' : si + 1}</div>
           <div class="mini"><input type="number" inputmode="decimal" placeholder="${ex.suggest || '—'}" value="${s.weight !== '' ? s.weight : ''}" data-ex="${i}" data-set="${si}" data-fld="weight"><span>lb</span></div>
           <div class="mini"><input type="number" inputmode="numeric" placeholder="reps" value="${s.reps !== '' ? s.reps : ''}" data-ex="${i}" data-set="${si}" data-fld="reps"><span>×</span></div>
           <button class="check ${s.done ? 'on' : ''}" data-ex="${i}" data-set="${si}">
@@ -264,14 +264,33 @@ App.Workout = (function () {
       btn.addEventListener('click', () => {
         const ex = current.exercises[+btn.dataset.ex];
         const set = ex.sets[+btn.dataset.set];
+        // Snapshot prior bests BEFORE marking done (current log is live by reference).
+        let prevBest = 0, prevMaxW = 0;
+        if (!set.done && (ex.type === 'main' || ex.type === 'acc')) {
+          const hist = Store.exerciseHistory(ex.key);
+          prevBest = hist.reduce((mx, h) => Math.max(mx, epley1RM(h.weight, h.reps)), 0);
+          prevMaxW = hist.reduce((mx, h) => Math.max(mx, h.weight), 0);
+        }
         set.done = !set.done;
+        let prMsg = null;
         if (set.done) {
           if (set.weight === '' && ex.suggest) set.weight = ex.suggest;
           if (set.reps === '' && ex.type !== 'cond') { const m = String(ex.reps).match(/\d+/); set.reps = m ? +m[0] : 10; }
-        }
+          if ((ex.type === 'main' || ex.type === 'acc') && set.weight > 0 && set.reps > 0) {
+            const e1 = epley1RM(+set.weight, +set.reps);
+            if (prevBest > 0 && e1 > prevBest + 0.01) { set.pr = '1RM'; prMsg = `🏆 Estimated 1RM PR — ${set.weight} × ${set.reps}`; }
+            else if (prevMaxW > 0 && +set.weight > prevMaxW) { set.pr = 'weight'; prMsg = `🏆 Weight PR — ${set.weight} lb`; }
+            else set.pr = null;
+          }
+        } else { set.pr = null; }
         persist();
         render(container, current.dateKey);
-        if (set.done) UI.toast('Set logged 💪', 'good');
+        if (set.done) {
+          if (prMsg) UI.toast(prMsg, 'good');
+          else UI.toast('Set logged', 'good');
+          const p = Store.profile();
+          if (p.restTimerOn && ex.type !== 'cond' && App.Timer) App.Timer.start(p.restTimer || 120);
+        } else { App.Timer && App.Timer.stop(); }
       });
     });
     const finish = container.querySelector('#wk-finish');

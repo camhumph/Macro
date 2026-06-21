@@ -168,6 +168,16 @@ window.App = window.App || {};
       ${UI.field('Reminder time', `<input class="input" id="s-time" type="time" value="${p.weighInTime}">`)}
 
       <div class="divider"></div>
+      <div class="list-row">
+        <div class="lr-l"><b>Rest timer</b><small>Auto-start between sets</small></div>
+        <div class="switch ${p.restTimerOn?'on':''}" id="s-rt"></div>
+      </div>
+      <div class="inline-fields" style="margin-bottom:14px">
+        <div class="field" style="margin:0"><label>Rest (seconds)</label><input class="input" id="s-rtsec" type="number" value="${p.restTimer||120}"></div>
+        <div class="field" style="margin:0"><label>Water goal (cups)</label><input class="input" id="s-water" type="number" value="${p.waterGoal||8}"></div>
+      </div>
+
+      <div class="divider"></div>
       <b>Data & Backup</b>
       <p class="muted" style="margin:6px 0 12px;font-size:12.5px;line-height:1.5">On iPhone, the Home-Screen app and Safari keep <b>separate</b> data. Use this installed app and back up regularly.</p>
       <div class="btn-row" style="margin-top:0">
@@ -182,6 +192,7 @@ window.App = window.App || {};
       G.wireGoalChips(m, goals);
       const rem = m.querySelector('#s-rem'); rem.onclick = () => rem.classList.toggle('on');
       const flex = m.querySelector('#s-flex'); flex.onclick = () => flex.classList.toggle('on');
+      const rt = m.querySelector('#s-rt'); rt.onclick = () => rt.classList.toggle('on');
       const custom = m.querySelector('#s-custom');
       custom.onclick = () => { custom.classList.toggle('on'); m.querySelector('#s-macros').classList.toggle('hidden', !custom.classList.contains('on')); };
 
@@ -217,6 +228,9 @@ window.App = window.App || {};
           split: m.querySelector('#g-split').value,
           daysPerWeek: +m.querySelector('#g-days').value || 0,
           scheduleMode: flex.classList.contains('on') ? 'flexible' : 'fixed',
+          restTimerOn: rt.classList.contains('on'),
+          restTimer: +m.querySelector('#s-rtsec').value || 120,
+          waterGoal: +m.querySelector('#s-water').value || 8,
           targetDate: m.querySelector('#s-target').value || '',
           weighInTime: m.querySelector('#s-time').value || p.weighInTime,
           reminders: wantRem,

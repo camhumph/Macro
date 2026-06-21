@@ -38,9 +38,14 @@ App.Store = (function () {
         weightDir:1, weeklyRate:0.6, targetWeight:165,
         weighInTime:'20:00',
         reminders:true,
+        restTimer:120,          // seconds rest between sets
+        restTimerOn:true,
+        waterGoal:8,            // cups/day
       },
       workoutLogs:{},  // dateKey -> { week, phase, dayType, dayName, exercises:[...] }
       foodLogs:{},     // dateKey -> [ entries ]
+      water:{},        // dateKey -> cups
+      meals:[],        // saved meals: [ { id, name, items:[entry], emoji } ]
       weightLogs:[],   // [ { date, weight } ] sorted by date
       pantry:[],       // scanned/saved foods you draw portions from
       programOverrides:{}, // dayType -> [ {key, sets, custom?} ] custom routine
@@ -208,6 +213,23 @@ App.Store = (function () {
     }, { cal:0, protein:0, carbs:0, fat:0 });
   }
 
+  /* ---------- water ---------- */
+  function water(dateKey) { return state.water[dateKey || todayKey()] || 0; }
+  function addWater(cups, dateKey) {
+    dateKey = dateKey || todayKey();
+    state.water[dateKey] = Math.max(0, (state.water[dateKey] || 0) + cups);
+    save();
+    return state.water[dateKey];
+  }
+
+  /* ---------- saved meals (combos of foods) ---------- */
+  function meals() { return state.meals; }
+  function addMeal(name, items, emoji) {
+    const m = { id: 'm' + Date.now(), name, emoji: emoji || '🍱', items: items.map(it => ({ ...it })) };
+    state.meals.unshift(m); save(); return m;
+  }
+  function removeMeal(id) { state.meals = state.meals.filter(m => m.id !== id); save(); }
+
   /* ---------- pantry (scanned / saved foods you draw portions from) ---------- */
   function pantry() { return state.pantry; }
   function addPantry(item) {
@@ -250,6 +272,14 @@ App.Store = (function () {
     delete state.workoutLogs[dateKey];
     save();
   }
+  // All workout logs with at least one done set, newest first.
+  function allWorkoutLogs() {
+    return Object.keys(state.workoutLogs)
+      .map(dk => state.workoutLogs[dk])
+      .filter(log => (log.exercises || []).some(ex => (ex.sets || []).some(s => s.done)))
+      .sort((a, b) => a.dateKey < b.dateKey ? 1 : -1);
+  }
+
   // Dates with a completed lifting session (≥1 done set, not rest/cardio), sorted.
   function trainingDates() {
     return Object.keys(state.workoutLogs).filter(dk => {
@@ -310,6 +340,7 @@ App.Store = (function () {
     weekFor, daysUntilTarget, daysIntoProgram, dayDiff,
     logWeight, weightToday, latestWeight,
     foodLog, addFood, updateFood, removeFood, dayTotals,
+    water, addWater, meals, addMeal, removeMeal, allWorkoutLogs,
     pantry, addPantry, updatePantry, removePantry,
     getProgramOverride, setProgramOverride, clearProgramOverride,
     getDayChoice, setDayChoice, clearDayChoice, trainingDates,

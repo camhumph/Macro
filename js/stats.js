@@ -12,8 +12,9 @@ App.Stats = (function () {
 
   function page(container) {
     container.innerHTML = `
-      <div class="segment" id="st-seg">
+      <div class="segment scroll" id="st-seg">
         <button data-seg="strength">Strength</button>
+        <button data-seg="history">History</button>
         <button data-seg="predict">Predict</button>
         <button data-seg="compete">Compete</button>
         <button data-seg="program">Plan</button>
@@ -25,6 +26,7 @@ App.Stats = (function () {
     const show = (which) => {
       seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.seg === which));
       if (which === 'strength') strength(body);
+      else if (which === 'history') history(body);
       else if (which === 'predict') predict(body);
       else if (which === 'compete') App.Leaderboard.render(body);
       else program(body);
@@ -32,6 +34,30 @@ App.Stats = (function () {
     seg.querySelectorAll('button').forEach(b => b.onclick = () => show(b.dataset.seg));
     show(startSeg);
     startSeg = 'strength';
+  }
+
+  /* ---------- strength standards (1RM / bodyweight) → rank ---------- */
+  const RANKS = ['Untrained', 'Beginner', 'Novice', 'Intermediate', 'Advanced', 'Elite'];
+  // male thresholds (1RM ÷ bodyweight) for Beginner..Elite
+  const STD = {
+    bench:   [0.5, 0.75, 1.0, 1.5, 2.0],
+    incline: [0.4, 0.6, 0.85, 1.25, 1.7],
+    squat:   [0.75, 1.25, 1.5, 2.0, 2.75],
+    front:   [0.6, 1.0, 1.3, 1.75, 2.3],
+    ohp:     [0.35, 0.55, 0.8, 1.1, 1.5],
+    row:     [0.5, 0.7, 0.95, 1.25, 1.6],
+    rdl:     [1.0, 1.4, 1.75, 2.25, 2.75],
+  };
+  const STD_OF = { flatBench:'bench', inclineBB:'incline', squat:'squat', frontSquat:'front', ohp:'ohp', bbRow:'row', rdl:'rdl' };
+  function rankFor(key, oneRM) {
+    const s = STD[STD_OF[key]]; if (!s) return null;
+    const bw = Store.latestWeight() || 1;
+    const female = Store.profile().sex === 'female';
+    const ratio = oneRM / bw;
+    let idx = 0;
+    s.forEach((th, i) => { const t = female ? th * 0.72 : th; if (ratio >= t) idx = i + 1; });
+    const next = idx < 5 ? (female ? s[idx] * 0.72 : s[idx]) : null;
+    return { name: RANKS[idx], idx, ratio, nextRatio: next };
   }
 
   /* ---------- Strength: estimated 1RM table ---------- */
@@ -43,18 +69,61 @@ App.Stats = (function () {
     }
     body.innerHTML = `
       <p class="muted" style="margin:4px 2px 14px;font-size:13px">Estimated 1-rep max (Epley) from your best logged set, plus what you should be able to hit at each rep range.</p>
-      ${lifts.map(l => `
+      ${lifts.map(l => {
+        const rk = rankFor(l.key, l.oneRM);
+        return `
         <div class="card" style="margin-bottom:12px">
           <div class="spread">
             <b style="font-size:16px">${UI.esc(l.name)}</b>
             <div class="pill accent">${UI.round(l.oneRM)} lb 1RM</div>
           </div>
+          ${rk ? `<div class="rank-bar">
+            <div class="spread" style="margin-bottom:6px"><span class="rank-chip rk${rk.idx}">${rk.name}</span><span class="muted" style="font-size:12px">${(rk.ratio).toFixed(2)}× bodyweight</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:${UI.clamp(rk.idx/5*100,4,100)}%;background:var(--accent)"></div></div>
+            ${rk.nextRatio ? `<div class="last-hint">${UI.round(rk.nextRatio*(Store.latestWeight()||1))} lb 1RM for ${RANKS[rk.idx+1]}</div>` : `<div class="last-hint suggest">Elite — top tier 💪</div>`}
+          </div>` : ''}
           <div class="grid-2" style="margin-top:12px">
             ${repTile('5 reps', l.e5)}${repTile('8 reps', l.e8)}
             ${repTile('10 reps', l.e10)}${repTile('12 reps', l.e12)}
           </div>
           <div class="last-hint">Best set: ${l.from.weight} lb × ${l.from.reps}</div>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
+    `;
+  }
+
+  /* ---------- History: past sessions ---------- */
+  function history(body) {
+    const logs = Store.allWorkoutLogs();
+    if (!logs.length) {
+      body.innerHTML = `<div class="empty"><div class="big">📚</div>Your completed workouts will show up here.</div>`;
+      return;
+    }
+    const fmtDate = dk => { const d = new Date(dk + 'T00:00:00'); return d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' }); };
+    body.innerHTML = `
+      <p class="muted" style="margin:4px 2px 14px;font-size:13px">${logs.length} session${logs.length>1?'s':''} logged.</p>
+      ${logs.map(log => {
+        const doneSets = (log.exercises||[]).flatMap(ex => (ex.sets||[]).filter(s => s.done).map(s => ({ ...s, name:ex.name })));
+        const vol = doneSets.reduce((v, s) => v + (s.weight*s.reps||0), 0);
+        const prs = doneSets.filter(s => s.pr).length;
+        const tops = (log.exercises||[]).filter(ex => ex.sets.some(s=>s.done)).map(ex => {
+          const best = ex.sets.filter(s=>s.done).sort((a,b)=>(b.weight*b.reps)-(a.weight*a.reps))[0];
+          return best ? `${ex.name} ${best.weight}×${best.reps}` : ex.name;
+        });
+        return `
+        <div class="card" style="margin-bottom:12px">
+          <div class="spread">
+            <b>${UI.esc(log.dayName || 'Workout')}</b>
+            <span class="muted" style="font-size:12px">${fmtDate(log.dateKey)}</span>
+          </div>
+          <div class="row" style="gap:14px;margin:8px 0 6px">
+            <span class="pill">${doneSets.length} sets</span>
+            <span class="pill">${UI.round(vol).toLocaleString()} lb volume</span>
+            ${prs ? `<span class="pill accent">🏆 ${prs} PR${prs>1?'s':''}</span>` : ''}
+          </div>
+          <div class="last-hint">${tops.slice(0,6).map(UI.esc).join(' · ')}</div>
+        </div>`;
+      }).join('')}
     `;
   }
   function repTile(label, v) {
