@@ -93,6 +93,7 @@ App.Goals = (function () {
   };
 
   function plan(profile, weight) {
+    const usingActive = !profile;                     // real plan vs a preview with a built profile
     profile = profile || Store.profile();
     weight = weight || Store.latestWeight();
     const c = combine(profile.goals);
@@ -102,7 +103,13 @@ App.Goals = (function () {
       c.calAdj = ph.calAdj; c.dir = ph.dir; c.rate = ph.rate;
       if (ph.proteinPerLb) c.proteinPerLb = Math.max(c.proteinPerLb, ph.proteinPerLb);
     }
-    const tdeeVal = tdee(profile, weight);
+    // Maintenance: prefer the data-driven Adaptive TDEE once we have enough
+    // logged intake + weight history; otherwise fall back to Mifflin–St Jeor.
+    let tdeeVal = tdee(profile, weight), adaptive = false;
+    if (usingActive && App.Adaptive) {
+      const m = App.Adaptive.maintenance();
+      if (m) { tdeeVal = m.tdee; adaptive = true; }
+    }
     let cal = Math.max(1200, Math.round(tdeeVal * (1 + c.calAdj) / 10) * 10);
     let protein = Math.round(c.proteinPerLb * weight);
     const fat = Math.round(c.fatPerLb * weight);
@@ -138,7 +145,7 @@ App.Goals = (function () {
     const days = profile.daysPerWeek || App.DATA.SPLITS[split].defaultDays;
     return {
       tdee: Math.round(tdeeVal), cal, protein, carbs, fat,
-      dir, weeklyRate, targetWeight, horizon, bias: c.bias, cardio: c.cardio, customGoal,
+      dir, weeklyRate, targetWeight, horizon, bias: c.bias, cardio: c.cardio, customGoal, adaptive,
       split, days, splitName: App.DATA.SPLITS[split].name,
       phase: customGoal ? 'Goal weight' : (ph ? ph.name : 'Auto'),
       keys: c.keys, title: titleFor(c.keys), guide: guideFor({ ...c, dir }, weeklyRate),
@@ -227,7 +234,7 @@ App.Goals = (function () {
         <div class="spread" style="margin-top:6px"><span class="muted">Target rate</span><b>${rate}</b></div>
         <div class="spread" style="margin-top:6px"><span class="muted">Split</span><b>${pl.splitName} · ${pl.days}×/wk</b></div>
         <div class="spread" style="margin-top:6px"><span class="muted">Emphasis</span><b>${biasLabel(pl.bias)}</b></div>
-        <div class="spread" style="margin-top:6px"><span class="muted">Maintenance</span><b>~${pl.tdee} cal</b></div>
+        <div class="spread" style="margin-top:6px"><span class="muted">Maintenance${pl.adaptive ? ' <span class="pill accent" style="font-size:10px;padding:1px 6px">adaptive</span>' : ''}</span><b>~${pl.tdee} cal</b></div>
       </div>`;
   }
 

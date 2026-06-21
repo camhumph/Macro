@@ -181,6 +181,10 @@ window.App = window.App || {};
       </div>
 
       <div class="divider"></div>
+      <b>Strava</b>
+      <div id="s-strava" style="margin-top:8px"></div>
+
+      <div class="divider"></div>
       <b>Data & Backup</b>
       <p class="muted" style="margin:6px 0 12px;font-size:12.5px;line-height:1.5">On iPhone, the Home-Screen app and Safari keep <b>separate</b> data. Use this installed app and back up regularly.</p>
       <div class="btn-row" style="margin-top:0">
@@ -194,6 +198,7 @@ window.App = window.App || {};
     `, (m, close) => {
       G.wireGoalChips(m, goals);
       m.querySelector('#s-race').onclick = () => { close(); App.Running.setupSheet(() => { setProfileInitial(); Router.refresh(); }); };
+      renderStrava(m.querySelector('#s-strava'));
       const rem = m.querySelector('#s-rem'); rem.onclick = () => rem.classList.toggle('on');
       const flex = m.querySelector('#s-flex'); flex.onclick = () => flex.classList.toggle('on');
       const rt = m.querySelector('#s-rt'); rt.onclick = () => rt.classList.toggle('on');
@@ -257,6 +262,36 @@ window.App = window.App || {};
         if (confirm('Erase this profile\'s workouts, food and weight history?')) { Store.resetAll(); close(); location.reload(); }
       };
     });
+  }
+
+  /* ---------- Strava settings ---------- */
+  function renderStrava(host) {
+    const S = App.Strava; const c = S.cfg();
+    if (S.connected()) {
+      host.innerHTML = `
+        <p class="muted" style="margin:0 0 10px;font-size:13px">Connected${c.athlete ? ' as <b>' + UI.esc(c.athlete) + '</b>' : ''}.${c.lastSync ? ' Last sync ' + new Date(c.lastSync).toLocaleDateString() : ''}</p>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn primary" id="sv-sync">↻ Sync runs</button>
+          <button class="btn ghost danger" id="sv-disc">Disconnect</button>
+        </div>`;
+      host.querySelector('#sv-sync').onclick = async () => {
+        UI.toast('Syncing…');
+        try { const n = await S.sync(); UI.toast(`Imported ${n} run${n===1?'':'s'} 🏃`, 'good'); Router.refresh(); }
+        catch (e) { UI.toast('Strava: ' + e.message); }
+      };
+      host.querySelector('#sv-disc').onclick = () => { S.disconnect(); renderStrava(host); UI.toast('Disconnected'); };
+    } else {
+      host.innerHTML = `
+        <p class="muted" style="margin:0 0 10px;font-size:12.5px;line-height:1.5">Import your runs automatically. Needs a one-time setup (a serverless token endpoint) — see <b>STRAVA-SETUP.md</b>.</p>
+        ${UI.field('Strava Client ID', `<input class="input" id="sv-id" value="${UI.esc(c.clientId||'')}" placeholder="e.g. 12345">`)}
+        ${UI.field('Token endpoint URL', `<input class="input" id="sv-ep" value="${UI.esc(c.endpoint||'')}" placeholder="https://your-app.vercel.app/api/strava-token">`)}
+        <button class="btn primary" id="sv-conn">Connect Strava</button>`;
+      host.querySelector('#sv-conn').onclick = () => {
+        S.setConfig(host.querySelector('#sv-id').value, host.querySelector('#sv-ep').value);
+        if (!App.Strava.configured()) return UI.toast('Enter Client ID + endpoint');
+        S.connect();
+      };
+    }
   }
 
   /* ---------- Backup: export / import ---------- */
@@ -424,6 +459,7 @@ window.App = window.App || {};
     document.getElementById('profile-btn').onclick = () => App.Profiles.switcher();
 
     Store.requestPersist();   // ask iOS/Safari to keep our data durable
+    if (App.Strava) App.Strava.init();   // complete Strava OAuth redirect if returning
     Router.go('today');
 
     // Entry: fresh → onboarding; otherwise → "Who's training?" profile picker

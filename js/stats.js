@@ -196,6 +196,7 @@ App.Stats = (function () {
     // Marathon / race plan takes over when active.
     if ((Store.profile().goals || []).includes('marathon')) {
       body.innerHTML = `${App.Running.planCard()}
+        ${App.Workload.card()}
         <div style="margin-top:14px">${G.guideCard(pl)}</div>
         <button class="btn" id="plan-edit" style="margin-top:14px">Change goals & nutrition</button>`;
       const rc = body.querySelector('#rc-setup'); if (rc) rc.onclick = () => App.Running.setupSheet(() => program(body));
@@ -210,6 +211,7 @@ App.Stats = (function () {
 
     body.innerHTML = `
       ${G.planSummary(pl)}
+      ${App.Workload.card()}
       <div style="margin-top:14px">${G.guideCard(pl)}</div>
 
       <div class="card" style="margin-top:14px;line-height:1.5">

@@ -46,12 +46,50 @@ App.Running = (function () {
     };
   }
 
+  /* ---------- VDOT (Daniels–Gilbert) ---------- */
+  function vdotFromRace(distMi, timeSec) {
+    if (!distMi || !timeSec) return null;
+    const t = timeSec / 60;                          // minutes
+    const v = (distMi * 1609.34) / t;                // m/min
+    const pctMax = 0.8 + 0.1894393 * Math.exp(-0.012778 * t) + 0.2989558 * Math.exp(-0.1932605 * t);
+    const vo2 = -4.60 + 0.182258 * v + 0.000104 * v * v;
+    return vo2 / pctMax;
+  }
+  // pace (sec/mi) to run at a given fraction of VO2max for a VDOT score
+  function paceForVdot(vdot, pct) {
+    const vo2 = vdot * pct;
+    const a = 0.000104, b = 0.182258, c = -4.60 - vo2;
+    const disc = b * b - 4 * a * c; if (disc < 0) return null;
+    const v = (-b + Math.sqrt(disc)) / (2 * a);      // m/min
+    if (v <= 0) return null;
+    return (1609.34 / v) * 60;                        // sec/mi
+  }
+  const ZONE_PCT = { recovery: 0.66, easy: 0.70, long: 0.70, marathon: 0.84, race: 0.84, tempo: 0.88, interval: 0.975, rep: 1.10 };
+  function pacesFromVdot(vdot) {
+    const out = {};
+    Object.keys(ZONE_PCT).forEach(k => { out[k] = paceForVdot(vdot, ZONE_PCT[k]); });
+    return out;
+  }
+  // Riegel race-time prediction: T2 = T1 * (D2/D1)^1.06
+  function riegel(t1Sec, d1Mi, d2Mi) { return t1Sec * Math.pow(d2Mi / d1Mi, 1.06); }
+
   function plan(profile) {
     profile = profile || Store.profile();
     const r = get(profile);
     const dist = DISTANCES[r.distance] || DISTANCES.full;
     const goalPaceSec = r.goalTimeSec ? r.goalTimeSec / dist.mi : 0;
-    const P = paces(goalPaceSec);
+
+    // VDOT from a recent race → physiologically accurate paces + prediction
+    let vdot = null, predictedSec = null, goalGapSec = null;
+    if (r.raceVdotDist && r.raceVdotTime) {
+      const rd = DISTANCES[r.raceVdotDist];
+      if (rd) {
+        vdot = vdotFromRace(rd.mi, r.raceVdotTime);
+        predictedSec = riegel(r.raceVdotTime, rd.mi, dist.mi);
+        if (r.goalTimeSec) goalGapSec = r.goalTimeSec - predictedSec; // <0 = goal harder than predicted
+      }
+    }
+    const P = vdot ? pacesFromVdot(vdot) : paces(goalPaceSec);
     const wRem = weeksToRace(profile);
     const total = Math.max(wRem, r.planWeeks || 16);
     const taperWeeks = TAPER[r.distance] || 2;
@@ -78,7 +116,13 @@ App.Running = (function () {
     longRun = Math.min(longRun, peakLong);
 
     return { dist, goalPaceSec, paces: P, weeksToRace: wRem, total, phase, weekIndex,
-             weekMileage, longRun, runsPerWeek: r.runsPerWeek || 4, sched: schedule(r.runsPerWeek || 4) };
+             weekMileage, longRun, runsPerWeek: r.runsPerWeek || 4, sched: schedule(r.runsPerWeek || 4),
+             vdot: vdot ? Math.round(vdot) : null, predictedSec, goalGapSec };
+  }
+  function hms(sec) {
+    if (sec == null) return '--';
+    sec = Math.round(sec); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
   }
 
   // weekday(0=Sun) -> run type
@@ -119,6 +163,11 @@ App.Running = (function () {
         <div class="field" style="margin:0"><label>Hours</label><input class="input" id="rs-h" type="number" inputmode="numeric" value="${gh || ''}" placeholder="3"></div>
         <div class="field" style="margin:0"><label>Minutes</label><input class="input" id="rs-m" type="number" inputmode="numeric" value="${gm || ''}" placeholder="45"></div>
       </div>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Recent race (for VDOT — optional but recommended)</label>
+      <div class="inline-fields" style="margin-bottom:14px">
+        <div class="field" style="margin:0"><label>Distance</label><select class="input" id="rs-rvd"><option value="">—</option>${['5k','10k','half','full'].map(k=>`<option value="${k}" ${r.raceVdotDist===k?'selected':''}>${DISTANCES[k].name}</option>`).join('')}</select></div>
+        <div class="field" style="margin:0"><label>Time (mm or h:mm)</label><input class="input" id="rs-rvt" placeholder="20:00 or 1:45:00" value="${r.raceVdotTime?hms(r.raceVdotTime):''}"></div>
+      </div>
       <div class="inline-fields" style="margin-bottom:14px">
         <div class="field" style="margin:0"><label>Weekly mileage now</label><input class="input" id="rs-wk" type="number" inputmode="decimal" value="${r.weeklyMileage || ''}" placeholder="15"></div>
         <div class="field" style="margin:0"><label>Longest recent run (mi)</label><input class="input" id="rs-long" type="number" inputmode="decimal" value="${r.longestRun || ''}" placeholder="6"></div>
@@ -130,6 +179,12 @@ App.Running = (function () {
       <div class="card" id="rs-preview" style="margin-bottom:14px"></div>
       <button class="btn primary" id="rs-save">Save race plan</button>
     `, (m, close) => {
+      const parseTime = s => {
+        const p = String(s || '').trim().split(':').map(Number);
+        if (p.length === 3) return p[0]*3600 + p[1]*60 + p[2];
+        if (p.length === 2) return p[0]*60 + p[1];
+        return 0;
+      };
       const read = () => ({
         distance: m.querySelector('#rs-dist').value,
         raceDate: m.querySelector('#rs-date').value,
@@ -138,15 +193,23 @@ App.Running = (function () {
         longestRun: +m.querySelector('#rs-long').value || 6,
         runsPerWeek: +m.querySelector('#rs-rpw').value || 4,
         experience: m.querySelector('#rs-exp').value,
+        raceVdotDist: m.querySelector('#rs-rvd').value,
+        raceVdotTime: parseTime(m.querySelector('#rs-rvt').value),
       });
       const preview = () => {
         const prof = Object.assign({}, Store.profile(), { running: read() });
         const pl = plan(prof);
-        m.querySelector('#rs-preview').innerHTML = pl.goalPaceSec
-          ? `<div class="spread"><b>Goal pace</b><span class="muted">${paceStr(pl.goalPaceSec)} /mi</span></div>
+        const feas = pl.goalGapSec == null ? '' :
+          pl.goalGapSec < -120 ? `<div class="last-hint" style="color:var(--bad)">⚠️ Goal is ${hms(-pl.goalGapSec)} faster than your fitness predicts (${hms(pl.predictedSec)}). Ambitious — train consistently.</div>` :
+          pl.goalGapSec > 120 ? `<div class="last-hint suggest">You're predicted to run ${hms(pl.predictedSec)} — your goal looks comfortably achievable.</div>` :
+          `<div class="last-hint suggest">Goal is right around your predicted ${hms(pl.predictedSec)} — realistic with good training.</div>`;
+        m.querySelector('#rs-preview').innerHTML = (pl.goalPaceSec || pl.vdot)
+          ? `${pl.vdot ? `<div class="spread"><b>VDOT</b><span class="muted">${pl.vdot}</span></div>` : ''}
+             ${pl.goalPaceSec ? `<div class="spread" style="margin-top:6px"><b>Goal pace</b><span class="muted">${paceStr(pl.goalPaceSec)} /mi</span></div>` : ''}
              <div class="spread" style="margin-top:6px"><b>This week</b><span class="muted">${pl.weekMileage} mi · long run ${pl.longRun} mi</span></div>
-             <div class="spread" style="margin-top:6px"><b>To race</b><span class="muted">${pl.weeksToRace} weeks · ${pl.phase} phase</span></div>`
-          : `<span class="muted">Enter a goal time to see your paces.</span>`;
+             <div class="spread" style="margin-top:6px"><b>To race</b><span class="muted">${pl.weeksToRace} weeks · ${pl.phase} phase</span></div>
+             ${feas}`
+          : `<span class="muted">Enter a goal time or recent race to see your paces.</span>`;
       };
       m.querySelectorAll('select,input').forEach(el => el.addEventListener('input', preview));
       preview();
@@ -167,7 +230,8 @@ App.Running = (function () {
     return `
       <div class="card">
         <div class="spread"><b>${pl.dist.name} plan</b><span class="pill accent">${pl.weeksToRace} wks · ${pl.phase}</span></div>
-        <div class="spread" style="margin-top:10px"><span class="muted">Goal time pace</span><b>${paceStr(pl.goalPaceSec)} /mi</b></div>
+        ${pl.vdot ? `<div class="spread" style="margin-top:10px"><span class="muted">VDOT · predicted</span><b>${pl.vdot} · ${hms(pl.predictedSec)}</b></div>` : ''}
+        <div class="spread" style="margin-top:${pl.vdot?6:10}px"><span class="muted">Goal time pace</span><b>${paceStr(pl.goalPaceSec)} /mi</b></div>
         <div class="spread" style="margin-top:6px"><span class="muted">This week</span><b>${pl.weekMileage} mi · long ${pl.longRun} mi</b></div>
       </div>
       <div class="card" style="margin-top:14px">
@@ -177,5 +241,5 @@ App.Running = (function () {
       <button class="btn" id="rc-setup" style="margin-top:14px">Edit race setup</button>`;
   }
 
-  return { DISTANCES, plan, prescriptionFor, paceStr, hmsToSec, weeksToRace, daysToRace, get, active, setupSheet, planCard };
+  return { DISTANCES, plan, prescriptionFor, paceStr, hms, hmsToSec, weeksToRace, daysToRace, get, active, setupSheet, planCard, vdotFromRace };
 })();
