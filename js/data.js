@@ -139,7 +139,7 @@ App.DATA = (function () {
     // Push / Pull / Legs (6-day split). Long-muscle-length emphasis.
     push: {
       name:'Push — Chest, Shoulders, Triceps',
-      exercises:[ E.inclineBB, E.ohp, E.inclineDB, E.lateral, E.pushdown ]
+      exercises:[ E.flatBench, E.ohp, E.inclineDB, E.lateral, E.pushdown ]
     },
     pull: {
       name:'Pull — Back, Rear Delts, Biceps',

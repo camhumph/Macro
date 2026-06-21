@@ -66,7 +66,9 @@ App.Workout = (function () {
     const pl = App.Goals.plan();
     const bias = pl.bias;
     const dow = new Date(dateKey + 'T00:00:00').getDay();
-    const dayType = DATA.buildSchedule(pl.split, pl.days, pl.cardio)[dow];
+    const scheduled = DATA.buildSchedule(pl.split, pl.days, pl.cardio)[dow];
+    const chosen = Store.getDayChoice(dateKey);          // manual override for this day
+    const dayType = (chosen && DATA.DAYS[chosen]) ? chosen : scheduled;
     const day = DATA.DAYS[dayType];
 
     if (existing && existing.dayType === dayType) return existing;
@@ -75,7 +77,7 @@ App.Workout = (function () {
     const defs = ov ? ov.map(resolveDef).filter(Boolean) : day.exercises;
     let exercises = defs.map(ex => makeInstance(ex, bias));
     if (!ov) exercises = arrange(exercises);   // MJ-first + supersets for default templates
-    return { dateKey, week, bias, planTitle: pl.title, dayType, dayName: day.name, exercises, customized: !!ov };
+    return { dateKey, week, bias, planTitle: pl.title, dayType, dayName: day.name, exercises, customized: !!ov, switched: !!chosen };
   }
 
   function persist() { if (current) Store.saveWorkout(current.dateKey, current); }
@@ -103,9 +105,13 @@ App.Workout = (function () {
         <div>
           <div class="pill accent">Week ${current.week}</div>
           <div class="pill" style="margin-left:6px">${UI.esc(App.Goals.biasLabel(current.bias))}</div>
+          ${current.switched ? '<div class="pill orange" style="margin-left:6px">↺ Switched</div>' : ''}
           ${current.customized ? '<div class="pill" style="margin-left:6px">✎ Custom</div>' : ''}
         </div>
-        <button class="btn small ghost" id="wk-${editMode ? 'info' : 'edit'}">${editMode ? 'Notes ▸' : '✏️ Edit'}</button>
+        <div class="row" style="gap:8px">
+          ${editMode ? '' : '<button class="btn small ghost" id="wk-switch">🔄 Switch</button>'}
+          <button class="btn small ghost" id="wk-${editMode ? 'info' : 'edit'}">${editMode ? 'Notes ▸' : '✏️ Edit'}</button>
+        </div>
       </div>
       <h2 style="margin:4px 2px 14px;font-size:21px;letter-spacing:-.4px">${UI.esc(current.dayName)}</h2>
     `;
@@ -224,7 +230,8 @@ App.Workout = (function () {
       <p class="muted" style="margin:0 0 14px">No training scheduled. Recovery is when adaptation happens — eat to your target and prioritise sleep.</p>
       ${days != null ? `<div class="pill accent">${days} days to your target</div>` : ''}
     </div>
-    <button class="btn" id="rest-add" style="margin-top:14px">＋ Add a session today</button>`;
+    <button class="btn primary" id="rest-switch" style="margin-top:14px">🔄 Train something today</button>
+    <button class="btn ghost" id="rest-add" style="margin-top:10px">＋ Build a custom session</button>`;
   }
 
   /* ---------- logging-mode events ---------- */
@@ -256,9 +263,49 @@ App.Workout = (function () {
     if (edit) edit.addEventListener('click', () => { editMode = true; render(container, current.dateKey); });
     const info = container.querySelector('#wk-info');
     if (info) info.addEventListener('click', coachSheet);
+    const sw = container.querySelector('#wk-switch');
+    if (sw) sw.addEventListener('click', () => switchSheet(container));
+  }
+
+  /* ---------- choose / switch today's workout ---------- */
+  const SWITCH_GROUPS = [
+    { label: 'Push / Pull / Legs', items: ['push', 'pull', 'legs'] },
+    { label: 'Upper / Lower', items: ['upperA', 'lowerA', 'upperB', 'lowerB'] },
+    { label: 'Full Body', items: ['fullA', 'fullB', 'fullC'] },
+    { label: 'Other', items: ['conditioning', 'rest'] },
+  ];
+  function switchSheet(container) {
+    const cur = current ? current.dayType : null;
+    UI.modal(`
+      <h2>Choose today's workout</h2>
+      <p class="muted" style="margin:-8px 0 14px;font-size:13px">Pick any session for today — this overrides the schedule for this day only.</p>
+      ${SWITCH_GROUPS.map(g => `
+        <div class="meal-head"><b>${g.label}</b><span></span></div>
+        ${g.items.map(k => {
+          const d = DATA.DAYS[k];
+          const n = (d.exercises || []).length;
+          const sub = k === 'rest' ? 'Recovery day' : k === 'conditioning' ? 'Cardio / conditioning' : `${n} exercises`;
+          return `<div class="search-result ${k === cur ? 'me' : ''}" data-day="${k}">
+            <div class="sr-main"><b>${UI.esc(d.name)}</b><small>${sub}</small></div>
+            <div style="color:var(--accent);font-size:22px">${k === cur ? '✓' : '→'}</div>
+          </div>`;
+        }).join('')}`).join('')}
+      <button class="btn ghost" id="sw-reset" style="margin-top:10px">Use the scheduled workout</button>
+    `, (m, close) => {
+      m.querySelectorAll('[data-day]').forEach(el => el.onclick = () => {
+        Store.setDayChoice(current.dateKey, el.dataset.day);
+        close(); render(container, current.dateKey); UI.toast('Workout switched', 'good');
+      });
+      m.querySelector('#sw-reset').onclick = () => {
+        Store.clearDayChoice(current.dateKey);
+        close(); render(container, current.dateKey); UI.toast('Back to scheduled');
+      };
+    });
   }
 
   function wireRest(container) {
+    const sw = container.querySelector('#rest-switch');
+    if (sw) sw.addEventListener('click', () => switchSheet(container));
     const add = container.querySelector('#rest-add');
     if (add) add.addEventListener('click', () => { editMode = true; picker('add', null, container); });
   }
@@ -374,7 +421,16 @@ App.Workout = (function () {
     UI.modal(`<h2>Training notes</h2>
       <div class="card" style="line-height:1.55">
         <b>${UI.esc(pl.title)}</b><br>
-        <span class="muted">Emphasis: ${UI.esc(App.Goals.biasLabel(pl.bias))}. Progress by adding weight or a rep when you hit the top of the range with good form.</span>
+        <span class="muted">Emphasis: ${UI.esc(App.Goals.biasLabel(pl.bias))}. Progress by adding weight or a rep when you hit the top of the range with good form, leaving the prescribed reps-in-reserve.</span>
+      </div>
+      <div class="card" style="margin-top:12px;line-height:1.5">
+        <b>How exercises are chosen</b>
+        <ul class="guide-list">
+          <li>Each session balances horizontal + vertical pressing and pulling, so no plane is overworked.</li>
+          <li>Multi-joint compounds lead while you're fresh; isolation follows.</li>
+          <li>Stretch-biased picks (incline curl, overhead triceps, RDL, deep squats) load the muscle at long lengths for more growth.</li>
+          <li>Opposing movements pair into supersets to save time and lift output.</li>
+        </ul>
       </div>
       <div class="card" style="margin-top:12px;line-height:1.5">
         <b>Nutrition</b><br>

@@ -43,6 +43,7 @@ App.Store = (function () {
       weightLogs:[],   // [ { date, weight } ] sorted by date
       pantry:[],       // scanned/saved foods you draw portions from
       programOverrides:{}, // dayType -> [ {key, sets, custom?} ] custom routine
+      dayChoices:{},   // dateKey -> dayType (manually chosen workout for a day)
       lastAdjustWeek:0 // last week we auto-adjusted calories
     };
   }
@@ -230,6 +231,21 @@ App.Store = (function () {
   function setProgramOverride(dayType, list) { state.programOverrides[dayType] = list; save(); }
   function clearProgramOverride(dayType) { delete state.programOverrides[dayType]; save(); }
 
+  /* ---------- per-day workout choice (manually picked workout) ---------- */
+  function getDayChoice(dateKey) { return state.dayChoices[dateKey || todayKey()] || null; }
+  function setDayChoice(dateKey, dayType) {
+    dateKey = dateKey || todayKey();
+    state.dayChoices[dateKey] = dayType;
+    delete state.workoutLogs[dateKey];   // start the chosen session fresh
+    save();
+  }
+  function clearDayChoice(dateKey) {
+    dateKey = dateKey || todayKey();
+    delete state.dayChoices[dateKey];
+    delete state.workoutLogs[dateKey];
+    save();
+  }
+
   /* ---------- workouts ---------- */
   function workoutLog(dateKey) {
     dateKey = dateKey || todayKey();
@@ -283,6 +299,7 @@ App.Store = (function () {
     foodLog, addFood, updateFood, removeFood, dayTotals,
     pantry, addPantry, updatePantry, removePantry,
     getProgramOverride, setProgramOverride, clearProgramOverride,
+    getDayChoice, setDayChoice, clearDayChoice,
     importState, requestPersist,
     workoutLog, saveWorkout, exerciseHistory,
     resetAll,
