@@ -26,6 +26,7 @@ App.Store = (function () {
         sex:'male', age:25, heightIn:70, startWeight:160,
         activity:'moderate',
         goals:['physique'],     // selected goal paths
+        running:{ distance:'full', raceDate:'', goalTimeSec:0, weeklyMileage:15, longestRun:6, runsPerWeek:4, experience:'intermediate' },
         dietPhase:'auto',       // 'auto' | 'bulk' | 'cut' | 'maintain'
         split:'auto',           // 'auto' | 'fullbody' | 'upperlower' | 'ppl'
         daysPerWeek:0,          // 0 = derive from split
@@ -35,6 +36,8 @@ App.Store = (function () {
         // Nutrition targets (derived from goals + stats; editable)
         cal:2600, protein:160, carbs:300, fat:70,
         customMacros:false,     // true once the user hand-edits macros
+        // Weight goal (0 = auto from goals/phase; >0 = you chose it)
+        goalWeight:0,
         // Derived weight goal (filled by Goals.recompute)
         weightDir:1, weeklyRate:0.6, targetWeight:165,
         weighInTime:'20:00',
@@ -299,11 +302,11 @@ App.Store = (function () {
     delete state.workoutLogs[dateKey];
     save();
   }
-  // All workout logs with at least one done set, newest first.
+  // All completed sessions (lifting or runs), newest first.
   function allWorkoutLogs() {
     return Object.keys(state.workoutLogs)
       .map(dk => state.workoutLogs[dk])
-      .filter(log => (log.exercises || []).some(ex => (ex.sets || []).some(s => s.done)))
+      .filter(log => (log.isRun && log.done) || (log.exercises || []).some(ex => (ex.sets || []).some(s => s.done)))
       .sort((a, b) => a.dateKey < b.dateKey ? 1 : -1);
   }
 

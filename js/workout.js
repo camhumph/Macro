@@ -72,6 +72,19 @@ App.Workout = (function () {
 
     let dayType, deload = false;
     const isChoice = choice && (DATA.DAYS[choice.type] || (choice.type || '').startsWith('rt_'));
+
+    // Marathon / race training: running plan drives the day (unless overridden).
+    if (!isChoice && App.Running && App.Running.active(Store.profile())) {
+      if (existing && existing.isRun) return existing;
+      const rx = App.Running.prescriptionFor(Store.profile(), dateKey);
+      if (rx.type !== 'rest') {
+        return { dateKey, week, isRun: true, dayType: 'run_' + rx.type, dayName: rx.name,
+                 run: rx, planTitle: pl.title, exercises: [], done: false, actual: {} };
+      }
+      // rest day → fall through to rest card
+      return { dateKey, week, isRun: false, dayType: 'rest', dayName: 'Rest / Recovery', exercises: [], bias: pl.bias };
+    }
+
     if (isChoice) {
       dayType = choice.type; deload = choice.deload;
     } else if (mode === 'flexible') {
@@ -122,6 +135,7 @@ App.Workout = (function () {
   /* ---------- render ---------- */
   function render(container, dateKey) {
     current = build(dateKey);
+    if (current.isRun) { renderRun(container); return; }
     const isTraining = current.exercises.length > 0;
 
     if (!isTraining) { container.innerHTML = restCard(); wireRest(container); return; }
@@ -237,6 +251,60 @@ App.Workout = (function () {
         ${ex.type === 'cond' ? '' : `<button class="btn small" data-sets="${i}" data-d="-1">− set</button><button class="btn small" data-sets="${i}" data-d="1">＋ set</button>`}
       </div>
     </div>`;
+  }
+
+  /* ---------- run session render ---------- */
+  function renderRun(container) {
+    const r = current.run, pl = App.Running.plan(Store.profile());
+    const days = App.Running.daysToRace();
+    const a = current.actual || {};
+    container.innerHTML = `
+      <div class="spread" style="margin-bottom:12px">
+        <div>
+          <div class="pill accent">${pl.phase} · Wk ${pl.weekIndex}</div>
+          <div class="pill" style="margin-left:6px">${pl.dist.name}</div>
+        </div>
+        <button class="btn small ghost" id="wk-switch">🔄 Switch</button>
+      </div>
+      <h2 style="margin:4px 2px 6px;font-size:22px;letter-spacing:-.4px">${UI.esc(r.name)}</h2>
+      <p class="muted" style="margin:0 0 14px;font-size:13px">${UI.esc(r.detail)}</p>
+
+      <div class="card">
+        <div class="ring-wrap">
+          <div style="flex:1;display:flex;flex-direction:column;gap:14px">
+            <div class="spread"><span class="muted">Target pace</span><b style="font-size:18px">${r.paceLabel} <span class="muted" style="font-size:13px">/mi</span></b></div>
+            <div class="spread"><span class="muted">Distance</span><b style="font-size:18px">${r.miles} mi</b></div>
+            <div class="spread"><span class="muted">Est. time</span><b style="font-size:18px">${App.Running.paceStr(r.paceSec * r.miles)}</b></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <b>Log your run</b>
+        <div class="inline-fields" style="margin-top:12px">
+          <div class="field" style="margin:0"><label>Distance (mi)</label><input class="input" id="run-mi" type="number" inputmode="decimal" value="${a.miles||r.miles}"></div>
+          <div class="field" style="margin:0"><label>Time (min)</label><input class="input" id="run-min" type="number" inputmode="decimal" value="${a.min||''}" placeholder="min"></div>
+        </div>
+        <div id="run-pace" class="last-hint" style="margin-top:8px"></div>
+      </div>
+
+      <button class="btn ${current.done?'':'primary'}" id="run-done" style="margin-top:14px">${current.done?'✓ Run logged':'Complete run'}</button>
+      ${days!=null ? `<p class="muted center" style="font-size:12px;margin-top:14px">${days} days to race · goal ${App.Running.paceStr(pl.goalPaceSec)}/mi pace</p>` : ''}
+    `;
+    const mi = container.querySelector('#run-mi'), min = container.querySelector('#run-min');
+    const showPace = () => {
+      const d = +mi.value, t = +min.value;
+      container.querySelector('#run-pace').textContent = (d > 0 && t > 0) ? `Your pace: ${App.Running.paceStr(t*60/d)} /mi` : '';
+    };
+    mi.addEventListener('input', showPace); min.addEventListener('input', showPace); showPace();
+    container.querySelector('#wk-switch').onclick = () => switchSheet(container);
+    container.querySelector('#run-done').onclick = () => {
+      current.done = !current.done;
+      current.actual = { miles: +mi.value || r.miles, min: +min.value || 0 };
+      persist();
+      UI.toast(current.done ? 'Run logged 🏃' : 'Marked incomplete', 'good');
+      renderRun(container);
+    };
   }
 
   function recoBanner() {
@@ -410,9 +478,15 @@ App.Workout = (function () {
     const info = container.querySelector('#wk-info'); if (info) info.onclick = coachSheet;
   }
 
+  // Re-order MJ-first and re-pair antagonist supersets after an edit, so the
+  // rest of the session automatically adjusts around a change.
+  function rebalance() {
+    current.exercises.forEach(e => { delete e.ss; });
+    current.exercises = arrange(current.exercises);
+  }
   function removeExercise(i, c) {
     if (current.exercises.length <= 1) return UI.toast('Keep at least one exercise');
-    current.exercises.splice(i, 1); persist(); syncOverride(); render(c, current.dateKey);
+    current.exercises.splice(i, 1); rebalance(); persist(); syncOverride(); render(c, current.dateKey);
   }
   function changeSets(i, d, c) {
     const ex = current.exercises[i];
@@ -423,7 +497,7 @@ App.Workout = (function () {
   }
   function addExerciseByDef(def, c) {
     current.exercises.push(makeInstance(def, current.bias));
-    current.customized = true; persist(); syncOverride();
+    current.customized = true; rebalance(); persist(); syncOverride();
     if (!editMode) editMode = true;
     render(c, current.dateKey);
   }
@@ -434,7 +508,10 @@ App.Workout = (function () {
       const cnt = old.sets.length;
       inst.sets = Array.from({ length: cnt }, () => ({ weight: inst.suggest || '', reps: '', done: false }));
     }
-    current.exercises[i] = inst; persist(); syncOverride(); render(c, current.dateKey);
+    current.exercises[i] = inst;
+    rebalance();                       // auto-adjust ordering + supersets around the swap
+    current.customized = true; persist(); syncOverride(); render(c, current.dateKey);
+    UI.toast('Swapped — session rebalanced', 'good');
   }
   function resetDay(c) {
     if (!confirm('Reset this day back to the coach\'s default routine?')) return;

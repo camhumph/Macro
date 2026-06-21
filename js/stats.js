@@ -193,6 +193,15 @@ App.Stats = (function () {
   function program(body) {
     const G = App.Goals;
     const pl = G.plan();
+    // Marathon / race plan takes over when active.
+    if ((Store.profile().goals || []).includes('marathon')) {
+      body.innerHTML = `${App.Running.planCard()}
+        <div style="margin-top:14px">${G.guideCard(pl)}</div>
+        <button class="btn" id="plan-edit" style="margin-top:14px">Change goals & nutrition</button>`;
+      const rc = body.querySelector('#rc-setup'); if (rc) rc.onclick = () => App.Running.setupSheet(() => program(body));
+      const pe = body.querySelector('#plan-edit'); if (pe) pe.onclick = () => App.openSettings();
+      return;
+    }
     const sched = DATA.buildSchedule(pl.split, pl.days, pl.cardio);
     const dayName = dt => dt === 'rest' ? 'Rest' : DATA.DAYS[dt].name;
     const labels = { 1:'Mon', 2:'Tue', 3:'Wed', 4:'Thu', 5:'Fri', 6:'Sat', 0:'Sun' };

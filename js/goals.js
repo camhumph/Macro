@@ -27,8 +27,11 @@ App.Goals = (function () {
     leanness:     { key:'leanness',     name:'Lose Fat',       emoji:'📉', short:'Get leaner',
                     blurb:'A moderate deficit with high protein to drop fat and keep muscle.',
                     calAdj:-0.20, dir:-1, rate:0.0065, proteinPerLb:1.1, fatPerLb:0.35, bias:'hypertrophy', cardio:'moderate' },
+    marathon:     { key:'marathon',     name:'Race Training',  emoji:'🏃', short:'Run a race',
+                    blurb:'A paced, periodized plan toward a goal race time. Set up your race below.',
+                    calAdj:0, dir:0, rate:0, proteinPerLb:0.8, fatPerLb:0.3, bias:'endurance', cardio:'high' },
   };
-  const GOAL_ORDER = ['physique','strength','conditioning','leanness'];
+  const GOAL_ORDER = ['physique','strength','conditioning','leanness','marathon'];
 
   const ACTIVITY = {
     sedentary:{ f:1.2,   label:'Sedentary — desk job, little exercise' },
@@ -100,21 +103,45 @@ App.Goals = (function () {
       if (ph.proteinPerLb) c.proteinPerLb = Math.max(c.proteinPerLb, ph.proteinPerLb);
     }
     const tdeeVal = tdee(profile, weight);
-    const cal = Math.max(1200, Math.round(tdeeVal * (1 + c.calAdj) / 10) * 10);
-    const protein = Math.round(c.proteinPerLb * weight);
+    let cal = Math.max(1200, Math.round(tdeeVal * (1 + c.calAdj) / 10) * 10);
+    let protein = Math.round(c.proteinPerLb * weight);
     const fat = Math.round(c.fatPerLb * weight);
-    const carbs = Math.max(0, Math.round((cal - protein * 4 - fat * 9) / 4));
-    const weeklyRate = c.dir === 0 ? 0 : +(c.rate * weight).toFixed(1);
+    let carbs = Math.max(0, Math.round((cal - protein * 4 - fat * 9) / 4));
+    let weeklyRate = c.dir === 0 ? 0 : +(c.rate * weight).toFixed(1);
     const horizon = horizonWeeks(profile);
-    const targetWeight = c.dir === 0 ? Math.round(weight) : Math.round(weight + c.dir * weeklyRate * horizon);
+    let dir = c.dir;
+    let targetWeight = c.dir === 0 ? Math.round(weight) : Math.round(weight + c.dir * weeklyRate * horizon);
+    let customGoal = false;
+
+    // Manual goal weight: you choose the target; calories + rate follow it.
+    const gw = +profile.goalWeight;
+    if (gw && gw > 0 && Math.abs(gw - weight) >= 0.5) {
+      customGoal = true;
+      targetWeight = Math.round(gw);
+      dir = gw > weight ? 1 : -1;
+      let rate = Math.abs(gw - weight) / horizon;          // lb/week to hit it in the window
+      rate = Math.min(rate, 0.012 * weight);               // cap ~1.2% bodyweight/week
+      weeklyRate = +rate.toFixed(1);
+      const dailyAdjust = Math.max(-800, Math.min(500, dir * rate * 3500 / 7));
+      cal = Math.max(1200, Math.round((tdeeVal + dailyAdjust) / 10) * 10);
+      const ppl = dir < 0 ? Math.max(c.proteinPerLb, 1.1) : c.proteinPerLb;
+      protein = Math.round(ppl * weight);
+      carbs = Math.max(0, Math.round((cal - protein * 4 - fat * 9) / 4));
+    } else if (gw && gw > 0) {
+      // goal essentially reached
+      customGoal = true; targetWeight = Math.round(gw); dir = 0; weeklyRate = 0;
+      cal = Math.max(1200, Math.round(tdeeVal / 10) * 10);
+      carbs = Math.max(0, Math.round((cal - protein * 4 - fat * 9) / 4));
+    }
+
     const split = (profile.split && profile.split !== 'auto') ? profile.split : defaultSplit(c.keys, c.cardio);
     const days = profile.daysPerWeek || App.DATA.SPLITS[split].defaultDays;
     return {
       tdee: Math.round(tdeeVal), cal, protein, carbs, fat,
-      dir: c.dir, weeklyRate, targetWeight, horizon, bias: c.bias, cardio: c.cardio,
+      dir, weeklyRate, targetWeight, horizon, bias: c.bias, cardio: c.cardio, customGoal,
       split, days, splitName: App.DATA.SPLITS[split].name,
-      phase: ph ? ph.name : 'Auto',
-      keys: c.keys, title: titleFor(c.keys), guide: guideFor(c, weeklyRate),
+      phase: customGoal ? 'Goal weight' : (ph ? ph.name : 'Auto'),
+      keys: c.keys, title: titleFor(c.keys), guide: guideFor({ ...c, dir }, weeklyRate),
     };
   }
 
