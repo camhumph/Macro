@@ -38,10 +38,8 @@ App.Barcode = (function () {
       <p class="muted center" id="bc-status" style="margin:12px 0">Point the camera at the barcode…</p>
       <button class="btn ghost" id="bc-manual">Type the barcode number instead</button>
     `, (m, close) => {
-      const host = document.getElementById('modal-host');
-      const finish = () => { stop(); close(); };
-      host.onclick = (e) => { if (e.target === host) finish(); };
-      m.querySelector('#bc-manual').onclick = () => { finish(); manualEntry(); };
+      UI.onClose(stop);   // stop the camera on any close (X, backdrop, etc.)
+      m.querySelector('#bc-manual').onclick = () => { close(); manualEntry(); };
 
       const status = m.querySelector('#bc-status');
       const video = m.querySelector('#bc-video');

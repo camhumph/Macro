@@ -90,6 +90,7 @@ window.App = window.App || {};
         <button class="btn small ghost" id="db-food" style="width:100%;margin-top:14px">Open food log ▸</button>
       </div>
 
+      ${App.Coach.card()}
       ${App.Leaderboard.streakCard()}
 
       <div class="section-title"><h2>Today's Session</h2><span class="link" id="db-stats">Stats ▸</span></div>

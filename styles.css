@@ -224,7 +224,10 @@ a{color:var(--accent-3)}
 .modal-host{position:fixed;inset:0;z-index:60;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
 .modal{background:var(--bg-2);width:100%;max-width:680px;max-height:92vh;overflow-y:auto;border-radius:24px 24px 0 0;padding:8px 18px calc(26px + var(--safe-b));border:1px solid var(--line);animation:slideUp .25s ease}
 @keyframes slideUp{from{transform:translateY(40px);opacity:.4}to{transform:translateY(0);opacity:1}}
-.modal-grip{width:42px;height:5px;border-radius:999px;background:var(--line);margin:10px auto 16px}
+.modal-bar{position:sticky;top:0;z-index:6;display:flex;align-items:center;justify-content:center;height:34px;margin:0 -18px 8px;padding:8px 14px 0;background:var(--bg-2)}
+.modal-grip{width:42px;height:5px;border-radius:999px;background:var(--line)}
+.modal-close{position:absolute;right:12px;top:5px;width:32px;height:32px;border-radius:50%;background:var(--card-2);border:1px solid var(--line);color:var(--text);font-size:15px;font-weight:700;display:grid;place-items:center;line-height:1}
+.modal-close:active{transform:scale(.92);border-color:var(--accent)}
 .modal h2{margin:0 0 14px;font-size:20px}
 
 /* ---------- Toast ---------- */
@@ -258,6 +261,18 @@ a{color:var(--accent-3)}
 .launch-card small{color:var(--muted);font-size:12px}
 .launch-av{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-size:32px}
 .launch-av.add{background:var(--card-2);color:var(--accent);border:2px dashed var(--line);font-size:30px}
+
+/* ---------- Coach insights ---------- */
+.coach-row{display:flex;gap:12px;padding:12px 0;align-items:flex-start}
+.coach-row.div{border-top:1px solid var(--line)}
+.coach-ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:18px;flex:none;background:var(--card-2)}
+.coach-ic.good{background:rgba(65,214,147,.14)}
+.coach-ic.warn{background:rgba(255,122,60,.14)}
+.coach-ic.bad{background:rgba(255,93,93,.16)}
+.coach-ic.info{background:rgba(58,208,255,.12)}
+.coach-tx{flex:1;min-width:0}
+.coach-tx b{font-size:14.5px;display:block}
+.coach-tx small{color:var(--muted);font-size:12.5px;line-height:1.45;display:block;margin-top:2px}
 
 /* ---------- Rest timer ---------- */
 .rest-timer{position:fixed;left:12px;right:12px;bottom:calc(var(--tab-h) + var(--safe-b) + 12px);z-index:70;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:16px;background:linear-gradient(135deg,#1c1f28,#16181f);border:1px solid var(--accent);box-shadow:var(--shadow);max-width:660px;margin:0 auto}

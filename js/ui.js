@@ -24,17 +24,22 @@ App.UI = (function () {
   }
 
   /* ---------- Modal (bottom sheet) ---------- */
+  let closeHook = null;
+  function onClose(fn) { closeHook = fn; }   // register cleanup (e.g. stop camera)
   function modal(innerHTML, onMount) {
     const host = document.getElementById('modal-host');
-    host.innerHTML = `<div class="modal"><div class="modal-grip"></div>${innerHTML}</div>`;
+    closeHook = null;
+    host.innerHTML = `<div class="modal"><div class="modal-bar"><span class="modal-grip"></span><button class="modal-close" aria-label="Close">✕</button></div>${innerHTML}</div>`;
     host.classList.remove('hidden');
     const close = () => closeModal();
     host.onclick = (e) => { if (e.target === host) close(); };
+    host.querySelector('.modal-close').onclick = close;
     if (onMount) onMount(host.querySelector('.modal'), close);
     return close;
   }
   function closeModal() {
     const host = document.getElementById('modal-host');
+    if (closeHook) { try { closeHook(); } catch (e) {} closeHook = null; }
     host.classList.add('hidden');
     host.innerHTML = '';
     host.onclick = null;
@@ -76,5 +81,5 @@ App.UI = (function () {
     return `<div class="field"><label>${label}</label>${inputHTML}</div>`;
   }
 
-  return { esc, round, clamp, toast, modal, closeModal, ring, macroBar, field };
+  return { esc, round, clamp, toast, modal, closeModal, onClose, ring, macroBar, field };
 })();
