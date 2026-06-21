@@ -54,25 +54,30 @@ App.Profiles = (function () {
 
   function newProfile() {
     const pick = { emoji: Store.AVATARS[0], color: Store.COLORS[2] };
+    const goals = ['physique'];
     UI.modal(`
       <h2>New profile</h2>
       ${UI.field('Name', `<input class="input" id="np-name" placeholder="Name">`)}
-      <div class="inline-fields" style="margin-bottom:14px">
-        <div class="field" style="margin:0"><label>Current weight</label><input class="input" id="np-w" type="number" inputmode="decimal" placeholder="lb"></div>
-        <div class="field" style="margin:0"><label>Goal gain (lb)</label><input class="input" id="np-g" type="number" value="10"></div>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Goal paths</label>
+      ${App.Goals.goalChips(goals)}
+      <div class="inline-fields" style="margin:14px 0">
+        <div class="field" style="margin:0"><label>Current weight (lb)</label><input class="input" id="np-w" type="number" inputmode="decimal" placeholder="lb"></div>
+        <div class="field" style="margin:0"><label>Activity</label>${App.Goals.activitySelect('moderate')}</div>
       </div>
       ${avatarPicker(pick.emoji, pick.color)}
       <button class="btn primary" id="np-go" style="margin-top:16px">Create profile</button>
     `, (m, close) => {
       wireAvatar(m, pick);
+      App.Goals.wireGoalChips(m, goals);
       m.querySelector('#np-go').onclick = () => {
         const name = m.querySelector('#np-name').value.trim();
         if (!name) return UI.toast('Name it first');
         Store.createProfile(name, pick.emoji, pick.color);
-        const w = +m.querySelector('#np-w').value || 150;
-        Store.setProfile({ startWeight: w, goalGain: +m.querySelector('#np-g').value || 10 });
+        const w = +m.querySelector('#np-w').value || 160;
+        Store.setProfile({ startWeight: w, goals, activity: m.querySelector('#g-act').value });
         Store.logWeight(w);
-        close(); App.afterProfileChange(); UI.toast('Profile created 💪', 'good');
+        App.Goals.recompute();
+        close(); App.afterProfileChange(); UI.toast('Profile created', 'good');
       };
     });
   }
@@ -105,7 +110,7 @@ App.Profiles = (function () {
   /* ---------- sharing ---------- */
   function shareApp() {
     const url = location.href.split('#')[0];
-    const payload = { title: 'Macro — 8 Week Shred', text: 'Get shredded with me 💪 Workouts, macros, weigh-ins & a leaderboard. Open in Safari → Add to Home Screen:', url };
+    const payload = { title: 'Macro', text: 'Macro — workout, macro and weight tracking with a leaderboard. Open in Safari → Add to Home Screen:', url };
     if (navigator.share) navigator.share(payload).catch(() => {});
     else if (navigator.clipboard) { navigator.clipboard.writeText(url); UI.toast('Link copied — send it to a friend'); }
     else UI.toast(url);
@@ -115,7 +120,7 @@ App.Profiles = (function () {
     const st = Store.get();
     const m = LB.metrics(st), lv = LB.levelOf(st);
     const json = JSON.stringify(st);
-    const summary = `${st.profile.name} on Macro 💪 Lvl ${lv.level} · ${m.sessions} sessions · ${m.gymStreak}🔥 streak · ${m.strength} lb total strength. Think you can beat me? 👀`;
+    const summary = `${st.profile.name} on Macro — Level ${lv.level}, ${m.sessions} sessions, ${m.gymStreak}-day streak, ${m.strength} lb total strength. Add me to compare.`;
     UI.modal(`
       <h2>Share your profile</h2>
       <p class="muted" style="margin:-8px 0 12px;font-size:13px">Send this to a friend — they tap <b>“+ Add friend”</b> and paste it to put you on their leaderboard.</p>

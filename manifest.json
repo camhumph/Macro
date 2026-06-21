@@ -1,7 +1,7 @@
 {
-  "name": "Macro — 8 Week Shred",
+  "name": "Macro — Training & Nutrition",
   "short_name": "Macro",
-  "description": "Your no-excuses 8-week muscle, macro and weigh-in coach.",
+  "description": "Goal-based training, macro tracking and weigh-ins.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

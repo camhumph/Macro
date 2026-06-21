@@ -30,35 +30,48 @@ App.Weight = (function () {
       rate7 = (logs[logs.length-1].weight - ref.weight) / days * 7;
     }
 
-    const targetLow = 1.0, targetHigh = 1.5; // lb/week lean-bulk band
+    // Target band depends on the goal direction (gain / maintain / lose).
+    const dir = p.weightDir || 0;
+    const want = p.weeklyRate || 0;   // magnitude lb/week
     let status = 'unknown', advice = '';
     const r = rate7 != null ? rate7 : weeklyRate;
+    const signed = dir >= 0 ? want : -want;   // expected signed rate
     if (r != null) {
-      if (r < targetLow - 0.25) {
-        status = 'low';
-        advice = `You're gaining only <b>${r.toFixed(1)} lb/wk</b>. That's under target. Add ~300 cal: another cup of rice, 2 tbsp PB, or a footlong. The scale must move up.`;
-      } else if (r > targetHigh + 0.6) {
-        status = 'high';
-        advice = `Up <b>${r.toFixed(1)} lb/wk</b> — faster than ideal. Some is fine, but to <b>keep the abs</b> trim ~200–300 cal (skip the extra cheese / one PB tbsp). Hold protein high.`;
+      if (dir === 0) {
+        if (Math.abs(r) <= 0.4) { status = 'good'; advice = `Bodyweight is stable (${r >= 0 ? '+' : ''}${r.toFixed(1)} lb/wk), which is on plan for a recomposition. Keep training hard and hold calories.`; }
+        else if (r > 0.4) { status = 'high'; advice = `Trending up ${r.toFixed(1)} lb/wk. If you'd rather stay flat, trim ~150–200 cal.`; }
+        else { status = 'low'; advice = `Trending down ${Math.abs(r).toFixed(1)} lb/wk. If you'd rather hold, add ~150–200 cal.`; }
+      } else if (dir > 0) {
+        if (r < want - 0.25) { status = 'low'; advice = `Gaining ${r.toFixed(1)} lb/wk, under your ${want} lb/wk target. Add ~250 cal — extra carbs or a protein shake.`; }
+        else if (r > want + 0.6) { status = 'high'; advice = `Gaining ${r.toFixed(1)} lb/wk, faster than your ${want} lb/wk target. Trim ~200–250 cal to keep the gain lean.`; }
+        else { status = 'good'; advice = `On target at ${r.toFixed(1)} lb/wk. Hold calories and keep progressing your lifts.`; }
       } else {
-        status = 'good';
-        advice = `Dialed in — <b>${r.toFixed(1)} lb/wk</b> is right in the lean-bulk band. Same plan, keep eating, keep lifting heavier.`;
+        if (-r < want - 0.25) { status = 'low'; advice = `Losing ${Math.abs(r).toFixed(1)} lb/wk, slower than your ${want} lb/wk target. Trim ~200 cal or add activity.`; }
+        else if (-r > want + 0.6) { status = 'high'; advice = `Losing ${Math.abs(r).toFixed(1)} lb/wk, faster than your ${want} lb/wk target. Add ~200 cal to protect muscle.`; }
+        else { status = 'good'; advice = `On target at ${Math.abs(r).toFixed(1)} lb/wk loss. Keep protein high and lifts heavy to hold muscle.`; }
       }
     } else {
-      advice = `Log your weight each morning. After week 1 I'll tell you exactly whether to eat more or hold.`;
+      advice = `Log your weight daily. After about a week the trend tells you whether to adjust calories.`;
     }
-    return { start, latest, gained: latest - start, weeklyRate, rate7, status, advice, targetLow, targetHigh };
+    return { start, latest, gained: latest - start, weeklyRate, rate7, status, advice, dir, want, signed };
   }
 
-  // Auto-bump calorie target once per program week when chronically under.
+  // Auto-adjust calories once per week if the trend is off target.
   function maybeAutoAdjust() {
     const a = analysis();
     const week = Store.weekFor();
     const st = Store.get();
-    if (a.status === 'low' && st.lastAdjustWeek !== week && st.weightLogs.length >= 4) {
-      Store.setProfile({ cal: Store.profile().cal + 250, carbs: Store.profile().carbs + 60 });
+    const p = Store.profile();
+    if (p.customMacros || st.weightLogs.length < 4 || st.lastAdjustWeek === week) return null;
+    if (a.status === 'low' && a.dir >= 0) {
+      Store.setProfile({ cal: p.cal + 250, carbs: p.carbs + 60 });
       st.lastAdjustWeek = week; Store.save();
-      return `Auto-adjust: bumped your target to ${Store.profile().cal} cal (+250) because the scale stalled. Eat up.`;
+      return `Calories raised to ${Store.profile().cal} (+250) — the trend was under your weight target.`;
+    }
+    if (a.status === 'low' && a.dir < 0) {
+      Store.setProfile({ cal: Math.max(1200, p.cal - 200), carbs: Math.max(0, p.carbs - 50) });
+      st.lastAdjustWeek = week; Store.save();
+      return `Calories lowered to ${Store.profile().cal} (−200) — fat loss had stalled.`;
     }
     return null;
   }
@@ -71,19 +84,20 @@ App.Weight = (function () {
 
     let banner = '';
     const adj = maybeAutoAdjust();
-    if (adj) banner = `<div class="banner warn"><span class="b-ico">⚙️</span><div><b>Routine updated</b>${adj}</div></div>`;
+    if (adj) banner = `<div class="banner warn"><span class="b-ico">⚙️</span><div><b>Plan updated</b>${adj}</div></div>`;
 
+    const days = Store.daysUntilTarget();
     const deltaClass = a.gained > 0 ? 'delta-up' : a.gained < 0 ? 'delta-bad' : '';
     container.innerHTML = `
       ${banner}
       <div class="hero">
         <div class="eyebrow">Bodyweight</div>
         <h1>${a.latest} <span style="font-size:18px;color:var(--muted)">lb</span></h1>
-        <p><span class="${deltaClass}">${a.gained>=0?'+':''}${UI.round(a.gained,1)} lb</span> since start · goal +${p.goalGain} lb</p>
+        <p><span class="${deltaClass}">${a.gained>=0?'+':''}${UI.round(a.gained,1)} lb</span> since start · goal ${p.targetWeight} lb</p>
         <div class="countdown">
           <div class="cd-box"><b>${a.rate7!=null?(a.rate7>=0?'+':'')+a.rate7.toFixed(1):'—'}</b><span>lb / week</span></div>
-          <div class="cd-box"><b>${Store.weekFor()}</b><span>of 8 weeks</span></div>
-          <div class="cd-box"><b>${Store.daysUntilClimb()}</b><span>to climb</span></div>
+          <div class="cd-box"><b>${p.targetWeight}</b><span>goal lb</span></div>
+          <div class="cd-box"><b>${days != null ? days : '—'}</b><span>${days != null ? 'days to target' : 'no target'}</span></div>
         </div>
       </div>
 
@@ -143,8 +157,8 @@ App.Weight = (function () {
     const xs = logs.map(l => new Date(l.date+'T00:00:00').getTime());
     const ys = logs.map(l => l.weight);
     // include goal line into range
-    const goal = p.startWeight + p.goalGain;
-    const minY = Math.min(...ys, p.startWeight) - 2;
+    const goal = p.targetWeight || p.startWeight;
+    const minY = Math.min(...ys, p.startWeight, goal) - 2;
     const maxY = Math.max(...ys, goal) + 2;
     const minX = xs[0], maxX = xs[xs.length-1] || minX+1;
     const sx = t => pad + (maxX===minX?0:(t-minX)/(maxX-minX))*(W-2*pad);
@@ -166,7 +180,7 @@ App.Weight = (function () {
       <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
       ${dots}
     </svg>
-    <div class="chart-legend"><span><i class="dot" style="background:var(--accent)"></i>Bodyweight</span><span><i class="dot" style="background:var(--accent-2)"></i>+${p.goalGain} lb goal</span></div>`;
+    <div class="chart-legend"><span><i class="dot" style="background:var(--accent)"></i>Bodyweight</span><span><i class="dot" style="background:var(--accent-2)"></i>${p.targetWeight} lb goal</span></div>`;
   }
 
   function fmtTime(t) {

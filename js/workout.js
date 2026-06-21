@@ -11,8 +11,8 @@ App.Workout = (function () {
   let editMode = false;
 
   /* ---------- build / resolve ---------- */
-  function makeInstance(ex, phase) {
-    const scheme = DATA.repScheme(ex.type, phase);
+  function makeInstance(ex, bias) {
+    const scheme = DATA.repScheme(ex.type, bias);
     const reps = ex.reps || scheme.reps;
     const setCount = ex.type === 'cond' ? 1 : (ex.sets || 3);
     const hist = Store.exerciseHistory(ex.key);
@@ -40,17 +40,18 @@ App.Workout = (function () {
     dateKey = dateKey || Store.todayKey();
     const existing = Store.workoutLog(dateKey);
     const week = Store.weekFor(dateKey);
-    const phase = DATA.phaseForWeek(week);
+    const pl = App.Goals.plan();
+    const bias = pl.bias;
     const dow = new Date(dateKey + 'T00:00:00').getDay();
-    const dayType = DATA.SCHEDULE[dow];
+    const dayType = DATA.scheduleFor(pl.cardio)[dow];
     const day = DATA.DAYS[dayType];
 
     if (existing && existing.dayType === dayType) return existing;
 
     const ov = Store.getProgramOverride(dayType);
     const defs = ov ? ov.map(resolveDef).filter(Boolean) : day.exercises;
-    const exercises = defs.map(ex => makeInstance(ex, phase));
-    return { dateKey, week, phase, dayType, dayName: day.name, exercises, customized: !!ov };
+    const exercises = defs.map(ex => makeInstance(ex, bias));
+    return { dateKey, week, bias, planTitle: pl.title, dayType, dayName: day.name, exercises, customized: !!ov };
   }
 
   function persist() { if (current) Store.saveWorkout(current.dateKey, current); }
@@ -73,15 +74,14 @@ App.Workout = (function () {
 
     if (!isTraining) { container.innerHTML = restCard(); wireRest(container); return; }
 
-    const phaseLabel = current.phase === 1 ? 'Phase 1 · Volume' : 'Phase 2 · Heavy Overload';
     let html = `
       <div class="spread" style="margin-bottom:12px">
         <div>
-          <div class="pill accent">Week ${current.week} / 8</div>
-          <div class="pill orange" style="margin-left:6px">${phaseLabel}</div>
+          <div class="pill accent">Week ${current.week}</div>
+          <div class="pill" style="margin-left:6px">${UI.esc(App.Goals.biasLabel(current.bias))}</div>
           ${current.customized ? '<div class="pill" style="margin-left:6px">✎ Custom</div>' : ''}
         </div>
-        <button class="btn small ghost" id="wk-${editMode ? 'coach' : 'edit'}">${editMode ? 'Coach ▸' : '✏️ Edit'}</button>
+        <button class="btn small ghost" id="wk-${editMode ? 'info' : 'edit'}">${editMode ? 'Notes ▸' : '✏️ Edit'}</button>
       </div>
       <h2 style="margin:4px 2px 14px;font-size:21px;letter-spacing:-.4px">${UI.esc(current.dayName)}</h2>
     `;
@@ -93,11 +93,11 @@ App.Workout = (function () {
     if (editMode) {
       html += `
         <button class="btn" id="wk-add" style="margin-top:4px">＋ Add exercise</button>
-        <button class="btn ghost danger" id="wk-reset" style="margin-top:10px">↺ Reset to coach's default</button>
+        <button class="btn ghost danger" id="wk-reset" style="margin-top:10px">↺ Reset to default</button>
         <button class="btn primary" id="wk-doneedit" style="margin-top:10px">Done editing</button>`;
     } else {
       const done = current.exercises.every(ex => ex.sets.some(s => s.done) || ex.type === 'cond');
-      html += `<button class="btn ${done ? 'primary' : ''}" id="wk-finish" style="margin-top:6px">${done ? '✓ Session Logged — Nice Work' : 'Finish & Save Session'}</button>`;
+      html += `<button class="btn ${done ? 'primary' : ''}" id="wk-finish" style="margin-top:6px">${done ? '✓ Session logged' : 'Finish & save session'}</button>`;
     }
 
     container.innerHTML = html;
@@ -162,23 +162,23 @@ App.Workout = (function () {
   function recoBanner() {
     const t = current.dayType;
     let tip;
-    if (t === 'conditioning') tip = `This is your <b>climb conditioning</b> day — keep it: incline walks / rucks build the engine for a 15k. It's intentionally light. Trim or swap the cardio type freely, but don't pile on daily cardio or you'll fight your calorie surplus.`;
-    else if (t.startsWith('upper')) tip = `Keep the shape: at least <b>1 press</b>, <b>1 pull</b>, and a <b>side-delt</b> move — that's what widens the frame in a shirt. Add/remove arm & core work to taste.`;
-    else if (t.startsWith('lower')) tip = `Keep <b>1 squat or hinge</b> + calves + core. Box jumps stay for punt power — drop them only on heavy weeks.`;
-    else tip = `Add whatever you like. For your goals, prioritise upper-body pump and keep core in.`;
-    return `<div class="banner info" style="margin-bottom:14px"><span class="b-ico">🧠</span><div><b>Coach recommendations</b>${tip} <span class="muted">Changes stick for every ${UI.esc(current.dayName.split('—')[0].trim())} going forward.</span></div></div>`;
+    if (t === 'conditioning') tip = `Conditioning day — steady cardio or intervals. Swap the modality (bike, row, stairs, run) to whatever you prefer.`;
+    else if (t.startsWith('upper')) tip = `Keep at least one press and one pull as the backbone of the day; add or swap accessories to target what you want.`;
+    else if (t.startsWith('lower')) tip = `Keep a squat or hinge as the main lift; adjust accessories and calves to taste.`;
+    else tip = `Add whatever fits your goals. Rep ranges follow your selected training emphasis.`;
+    return `<div class="banner info" style="margin-bottom:14px"><span class="b-ico">ℹ️</span><div><b>Notes</b>${tip} <span class="muted">Changes apply to every ${UI.esc(current.dayName)} going forward.</span></div></div>`;
   }
 
   function restCard() {
-    const climb = Store.daysUntilClimb();
+    const days = Store.daysUntilTarget();
     return `
     <div class="card center" style="padding:30px 18px">
-      <div style="font-size:46px">😮‍💨</div>
-      <h2 style="margin:10px 0 4px">Rest & Recover</h2>
-      <p class="muted" style="margin:0 0 14px">No lifting scheduled. Growth happens now — <b>so does eating.</b> Hit your 3,200 and sleep 8+ hrs.</p>
-      <div class="pill accent">${climb} days to the climb</div>
+      <div style="font-size:42px">🛌</div>
+      <h2 style="margin:10px 0 4px">Rest Day</h2>
+      <p class="muted" style="margin:0 0 14px">No training scheduled. Recovery is when adaptation happens — eat to your target and prioritise sleep.</p>
+      ${days != null ? `<div class="pill accent">${days} days to your target</div>` : ''}
     </div>
-    <button class="btn" id="rest-add" style="margin-top:14px">＋ Add my own session today</button>`;
+    <button class="btn" id="rest-add" style="margin-top:14px">＋ Add a session today</button>`;
   }
 
   /* ---------- logging-mode events ---------- */
@@ -208,8 +208,8 @@ App.Workout = (function () {
     if (finish) finish.addEventListener('click', () => { persist(); UI.toast('Session saved. Stats updated.', 'good'); App.Router.go('today'); });
     const edit = container.querySelector('#wk-edit');
     if (edit) edit.addEventListener('click', () => { editMode = true; render(container, current.dateKey); });
-    const coach = container.querySelector('#wk-coach');
-    if (coach) coach.addEventListener('click', coachSheet);
+    const info = container.querySelector('#wk-info');
+    if (info) info.addEventListener('click', coachSheet);
   }
 
   function wireRest(container) {
@@ -224,8 +224,8 @@ App.Workout = (function () {
     container.querySelectorAll('[data-sets]').forEach(b => b.onclick = () => changeSets(+b.dataset.sets, +b.dataset.d, container));
     const add = container.querySelector('#wk-add'); if (add) add.onclick = () => picker('add', null, container);
     const reset = container.querySelector('#wk-reset'); if (reset) reset.onclick = () => resetDay(container);
-    const done = container.querySelector('#wk-doneedit'); if (done) done.onclick = () => { editMode = false; render(container, current.dateKey); UI.toast('Routine updated ✅', 'good'); };
-    const coach = container.querySelector('#wk-coach'); if (coach) coach.onclick = coachSheet;
+    const done = container.querySelector('#wk-doneedit'); if (done) done.onclick = () => { editMode = false; render(container, current.dateKey); UI.toast('Routine updated', 'good'); };
+    const info = container.querySelector('#wk-info'); if (info) info.onclick = coachSheet;
   }
 
   function removeExercise(i, c) {
@@ -240,14 +240,14 @@ App.Workout = (function () {
     persist(); syncOverride(); render(c, current.dateKey);
   }
   function addExerciseByDef(def, c) {
-    current.exercises.push(makeInstance(def, current.phase));
+    current.exercises.push(makeInstance(def, current.bias));
     current.customized = true; persist(); syncOverride();
     if (!editMode) editMode = true;
     render(c, current.dateKey);
   }
   function swapExercise(i, def, c) {
     const old = current.exercises[i];
-    const inst = makeInstance(def, current.phase);
+    const inst = makeInstance(def, current.bias);
     if (old.type !== 'cond' && inst.type !== 'cond') {
       const cnt = old.sets.length;
       inst.sets = Array.from({ length: cnt }, () => ({ weight: inst.suggest || '', reps: '', done: false }));
@@ -258,7 +258,7 @@ App.Workout = (function () {
     if (!confirm('Reset this day back to the coach\'s default routine?')) return;
     Store.clearProgramOverride(current.dayType);
     const day = DATA.DAYS[current.dayType];
-    const exercises = day.exercises.map(ex => makeInstance(ex, current.phase));
+    const exercises = day.exercises.map(ex => makeInstance(ex, current.bias));
     current = Object.assign({}, current, { exercises, customized: false });
     Store.saveWorkout(current.dateKey, current);
     render(c, current.dateKey);
@@ -324,13 +324,17 @@ App.Workout = (function () {
   }
 
   function coachSheet() {
-    const phase = current.phase;
-    const msg = phase === 1
-      ? `<b>Phase 1 — Volume & Adaptation (Wk 1–4)</b><br>Find your 8–10 rep weights. Every week add <b>2.5–5 lb</b> OR <b>1–2 reps</b>. Box jumps stay low (3×3). Hammer lateral raises, incline press & pull-ups.`
-      : `<b>Phase 2 — Heavy Overload (Wk 5–8)</b><br>Main compounds drop to <b>6–8 reps</b> — load the plates. Keep curls, triceps & laterals at 12–15 for the pump. Minimal cardio.`;
-    UI.modal(`<h2>Coach</h2><div class="card" style="line-height:1.55">${msg}</div>
-      <div class="card" style="margin-top:12px;line-height:1.5"><b>Keep the abs 🔥</b><br><span class="muted">Lean-bulk, not dirty bulk. Protein every meal, ~1–1.5 lb/wk. Past 2 lb/wk you'll blur the abs — ease off the extra footlong.</span></div>
-      <button class="btn primary" style="margin-top:14px" id="coach-close">Let's get to work</button>`,
+    const pl = App.Goals.plan();
+    UI.modal(`<h2>Training notes</h2>
+      <div class="card" style="line-height:1.55">
+        <b>${UI.esc(pl.title)}</b><br>
+        <span class="muted">Emphasis: ${UI.esc(App.Goals.biasLabel(pl.bias))}. Progress by adding weight or a rep when you hit the top of the range with good form.</span>
+      </div>
+      <div class="card" style="margin-top:12px;line-height:1.5">
+        <b>Nutrition</b><br>
+        <span class="muted">${pl.cal} cal/day · ${pl.protein}g protein · ${pl.carbs}g carbs · ${pl.fat}g fat. ${pl.dir>0?`Target a slight surplus (~${pl.weeklyRate} lb/wk gain).`:pl.dir<0?`Target a moderate deficit (~${pl.weeklyRate} lb/wk loss).`:'Hold around maintenance.'}</span>
+      </div>
+      <button class="btn primary" style="margin-top:14px" id="coach-close">Done</button>`,
       (m, close) => { m.querySelector('#coach-close').onclick = close; });
   }
 

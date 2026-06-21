@@ -7,10 +7,10 @@ window.App = window.App || {};
   const Store = App.Store, UI = App.UI;
 
   const TITLES = {
-    today: ['Today', "Let's get to work."],
-    food:  ['Fuel', 'Eat like it\'s your job.'],
-    weight:['Weigh-In', 'Track the trend.'],
-    stats: ['Progress', 'Numbers don\'t lie.'],
+    today: ['Today', 'Your training & nutrition'],
+    food:  ['Nutrition', 'Calories & macros'],
+    weight:['Weigh-In', 'Track your trend'],
+    stats: ['Progress', 'Strength, plan & compete'],
   };
 
   let currentRoute = 'today';
@@ -44,38 +44,43 @@ window.App = window.App || {};
   function dashboard(view) {
     const p = Store.profile();
     const week = Store.weekFor();
-    const phase = App.DATA.phaseForWeek(week);
-    const climb = Store.daysUntilClimb();
+    const pl = App.Goals.plan();
+    const target = Store.daysUntilTarget();
     const t = Store.dayTotals();
     const remaining = Math.max(0, p.cal - t.cal);
-    const gained = Store.latestWeight() - p.startWeight;
+    const cur = Store.latestWeight();
+    const toGoal = (p.targetWeight || cur) - cur;
 
     const hour = new Date().getHours();
-    const greet = hour < 11 ? 'Good morning' : hour < 17 ? 'Afternoon' : 'Evening';
+    const greet = hour < 11 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
     let dueBanner = '';
     if (App.Reminders.isDue()) {
-      dueBanner = `<div class="banner warn"><span class="b-ico">⚖️</span><div><b>Weigh-in time</b>It's past ${App.Weight.fmtTime(p.weighInTime)} — step on the scale.</div>
+      dueBanner = `<div class="banner warn"><span class="b-ico">⚖️</span><div><b>Weigh-in time</b>It's past ${App.Weight.fmtTime(p.weighInTime)} — log today's weight.</div>
         <button class="btn small primary" id="db-weigh" style="margin-left:auto">Log</button></div>`;
     }
+
+    const goalLine = p.weightDir > 0 ? `${UI.round(Math.abs(toGoal),1)} lb to your goal of ${p.targetWeight} lb`
+      : p.weightDir < 0 ? `${UI.round(Math.abs(toGoal),1)} lb to your goal of ${p.targetWeight} lb`
+      : `Maintaining around ${p.targetWeight} lb`;
 
     view.innerHTML = `
       ${dueBanner}
       <div class="hero">
-        <div class="eyebrow">Week ${week} / 8 · Phase ${phase} ${phase===1?'· Volume':'· Heavy'}</div>
+        <div class="eyebrow">${UI.esc(pl.title)} · Week ${week}</div>
         <h1>${greet}.</h1>
-        <p>${climb>0 ? `${climb} days until the 15k climb. ${gained>=0?'+':''}${UI.round(gained,1)} lb so far.` : 'Climb week — show up shredded.'}</p>
+        <p>${goalLine}.</p>
         <div class="countdown">
-          <div class="cd-box"><b>${climb}</b><span>days to climb</span></div>
-          <div class="cd-box"><b>${gained>=0?'+':''}${UI.round(gained,1)}</b><span>lb gained</span></div>
-          <div class="cd-box"><b>${Store.latestWeight()}</b><span>current lb</span></div>
+          <div class="cd-box"><b>${cur}</b><span>current lb</span></div>
+          <div class="cd-box"><b>${p.targetWeight}</b><span>goal lb</span></div>
+          <div class="cd-box"><b>${target != null ? target : '—'}</b><span>${target != null ? 'days to target' : 'no target set'}</span></div>
         </div>
       </div>
 
       <div class="card" style="margin-top:14px">
         <div class="spread" style="margin-bottom:12px">
-          <b>Today's Fuel</b>
-          <span class="pill ${remaining>0?'orange':'accent'}">${remaining>0?UI.round(remaining)+' cal to go':'target hit ✓'}</span>
+          <b>Today's nutrition</b>
+          <span class="pill ${remaining>0?'orange':'accent'}">${remaining>0?UI.round(remaining)+' cal left':'target hit ✓'}</span>
         </div>
         <div class="macro-bars">
           ${UI.macroBar('Protein', t.protein, p.protein, 'var(--protein)')}
@@ -104,74 +109,118 @@ window.App = window.App || {};
   /* ---------- Settings sheet ---------- */
   function settings() {
     const p = Store.profile();
+    const G = App.Goals;
+    const goals = (p.goals || ['physique']).slice();
     UI.modal(`
-      <h2>Profile & Goals</h2>
-      ${UI.field('Name', `<input class="input" id="s-name" value="${UI.esc(p.name)}">`)}
-      <div class="inline-fields" style="margin-bottom:14px">
-        <div class="field" style="margin:0"><label>Start weight (lb)</label><input class="input" id="s-sw" type="number" value="${p.startWeight}"></div>
-        <div class="field" style="margin:0"><label>Goal gain (lb)</label><input class="input" id="s-gg" type="number" value="${p.goalGain}"></div>
-      </div>
-      ${UI.field('Climb date', `<input class="input" id="s-climb" type="date" value="${p.climbDate}">`)}
+      <h2>Goals & Profile</h2>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Goal paths (pick any mix)</label>
+      ${G.goalChips(goals)}
 
       <div class="divider"></div>
-      <b>Daily Macro Targets</b>
-      <div class="inline-fields" style="margin:12px 0 14px">
-        <div class="field" style="margin:0"><label>Calories</label><input class="input" id="s-cal" type="number" value="${p.cal}"></div>
-        <div class="field" style="margin:0"><label>Protein g</label><input class="input" id="s-p" type="number" value="${p.protein}"></div>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Your stats</label>
+      ${UI.field('Name', `<input class="input" id="s-name" value="${UI.esc(p.name)}">`)}
+      <div class="inline-fields" style="margin-bottom:14px">
+        <div class="field" style="margin:0"><label>Sex</label>${G.sexSelect(p.sex)}</div>
+        <div class="field" style="margin:0"><label>Age</label><input class="input" id="s-age" type="number" value="${p.age}"></div>
       </div>
       <div class="inline-fields" style="margin-bottom:14px">
-        <div class="field" style="margin:0"><label>Carbs g</label><input class="input" id="s-c" type="number" value="${p.carbs}"></div>
-        <div class="field" style="margin:0"><label>Fat g</label><input class="input" id="s-f" type="number" value="${p.fat}"></div>
+        <div class="field" style="margin:0"><label>Height (in)</label><input class="input" id="s-h" type="number" value="${p.heightIn}"></div>
+        <div class="field" style="margin:0"><label>Current weight (lb)</label><input class="input" id="s-sw" type="number" value="${UI.round(Store.latestWeight())}"></div>
+      </div>
+      ${UI.field('Activity level', G.activitySelect(p.activity))}
+      ${UI.field('Target date (optional)', `<input class="input" id="s-target" type="date" value="${p.targetDate||''}">`)}
+
+      <div class="divider"></div>
+      <div class="spread"><b>Your plan</b><button class="link" id="s-recalc" style="font-size:12px;color:var(--accent)">Recalculate ▸</button></div>
+      <div id="s-plan" style="margin-top:10px"></div>
+      <div id="s-guide" style="margin-top:12px"></div>
+
+      <div class="divider"></div>
+      <div class="list-row">
+        <div class="lr-l"><b>Override macros manually</b><small>Stop auto-calculating from goals</small></div>
+        <div class="switch ${p.customMacros?'on':''}" id="s-custom"></div>
+      </div>
+      <div id="s-macros" class="${p.customMacros?'':'hidden'}">
+        <div class="inline-fields" style="margin:4px 0 14px">
+          <div class="field" style="margin:0"><label>Calories</label><input class="input" id="s-cal" type="number" value="${p.cal}"></div>
+          <div class="field" style="margin:0"><label>Protein g</label><input class="input" id="s-p" type="number" value="${p.protein}"></div>
+        </div>
+        <div class="inline-fields" style="margin-bottom:14px">
+          <div class="field" style="margin:0"><label>Carbs g</label><input class="input" id="s-c" type="number" value="${p.carbs}"></div>
+          <div class="field" style="margin:0"><label>Fat g</label><input class="input" id="s-f" type="number" value="${p.fat}"></div>
+        </div>
       </div>
 
       <div class="divider"></div>
       <div class="list-row">
-        <div class="lr-l"><b>Weigh-in reminder</b><small>Get nagged daily</small></div>
+        <div class="lr-l"><b>Weigh-in reminder</b><small>Daily nudge to log your weight</small></div>
         <div class="switch ${p.reminders?'on':''}" id="s-rem"></div>
       </div>
       ${UI.field('Reminder time', `<input class="input" id="s-time" type="time" value="${p.weighInTime}">`)}
 
       <div class="divider"></div>
       <b>Data & Backup</b>
-      <p class="muted" style="margin:6px 0 12px;font-size:12.5px;line-height:1.5">On iPhone, the Home-Screen app and Safari keep <b>separate</b> data. Always use this installed app, and back up regularly so nothing is lost.</p>
+      <p class="muted" style="margin:6px 0 12px;font-size:12.5px;line-height:1.5">On iPhone, the Home-Screen app and Safari keep <b>separate</b> data. Use this installed app and back up regularly.</p>
       <div class="btn-row" style="margin-top:0">
         <button class="btn" id="s-export">⬆️ Export backup</button>
         <button class="btn" id="s-import">⬇️ Import / Restore</button>
       </div>
 
       <button class="btn primary" id="s-save" style="margin-top:18px">Save</button>
-      <button class="btn ghost danger" id="s-reset" style="margin-top:10px">Reset all data</button>
-      <p class="muted center" style="font-size:12px;margin-top:14px">Macro — your data lives only on this device.</p>
+      <button class="btn ghost danger" id="s-reset" style="margin-top:10px">Reset this profile</button>
+      <p class="muted center" style="font-size:12px;margin-top:14px">Your data lives only on this device.</p>
     `, (m, close) => {
-      const rem = m.querySelector('#s-rem');
-      rem.onclick = () => rem.classList.toggle('on');
+      G.wireGoalChips(m, goals);
+      const rem = m.querySelector('#s-rem'); rem.onclick = () => rem.classList.toggle('on');
+      const custom = m.querySelector('#s-custom');
+      custom.onclick = () => { custom.classList.toggle('on'); m.querySelector('#s-macros').classList.toggle('hidden', !custom.classList.contains('on')); };
+
+      // read current form into a temp profile for live plan preview
+      const readStats = () => ({
+        sex: m.querySelector('#g-sex').value, age:+m.querySelector('#s-age').value || p.age,
+        heightIn:+m.querySelector('#s-h').value || p.heightIn, activity:m.querySelector('#g-act').value,
+        targetDate:m.querySelector('#s-target').value, goals, startWeight:+m.querySelector('#s-sw').value || Store.latestWeight(),
+      });
+      const drawPlan = () => {
+        const pl = App.Goals.plan(Object.assign({}, p, readStats()), +m.querySelector('#s-sw').value || Store.latestWeight());
+        m.querySelector('#s-plan').innerHTML = App.Goals.planSummary(pl);
+        m.querySelector('#s-guide').innerHTML = App.Goals.guideCard(pl);
+      };
+      m.querySelector('#s-recalc').onclick = drawPlan;
+      m.querySelectorAll('[data-goal], #g-sex, #s-age, #s-h, #s-sw, #g-act, #s-target').forEach(el => el.addEventListener('change', drawPlan));
+      drawPlan();
+
       m.querySelector('#s-export').onclick = exportBackup;
       m.querySelector('#s-import').onclick = importBackup;
       m.querySelector('#s-save').onclick = async () => {
         const wantRem = rem.classList.contains('on');
-        Store.setProfile({
+        const wantCustom = custom.classList.contains('on');
+        const newW = +m.querySelector('#s-sw').value || Store.latestWeight();
+        Store.setProfile(Object.assign({
           name: m.querySelector('#s-name').value.trim() || 'Athlete',
-          startWeight: +m.querySelector('#s-sw').value || p.startWeight,
-          goalGain: +m.querySelector('#s-gg').value || p.goalGain,
-          climbDate: m.querySelector('#s-climb').value || p.climbDate,
-          cal: +m.querySelector('#s-cal').value || p.cal,
-          protein: +m.querySelector('#s-p').value || p.protein,
-          carbs: +m.querySelector('#s-c').value || p.carbs,
-          fat: +m.querySelector('#s-f').value || p.fat,
+          goals,
+          sex: m.querySelector('#g-sex').value,
+          age: +m.querySelector('#s-age').value || p.age,
+          heightIn: +m.querySelector('#s-h').value || p.heightIn,
+          activity: m.querySelector('#g-act').value,
+          targetDate: m.querySelector('#s-target').value || '',
           weighInTime: m.querySelector('#s-time').value || p.weighInTime,
           reminders: wantRem,
-        });
+          customMacros: wantCustom,
+        }, wantCustom ? {
+          cal:+m.querySelector('#s-cal').value || p.cal, protein:+m.querySelector('#s-p').value || p.protein,
+          carbs:+m.querySelector('#s-c').value || p.carbs, fat:+m.querySelector('#s-f').value || p.fat,
+        } : {}));
+        if (Math.abs(newW - Store.latestWeight()) > 0.01) Store.logWeight(newW);
+        App.Goals.recompute();
         if (wantRem) await App.Reminders.requestPermission();
         App.Reminders.start();
-        close();
-        setProfileInitial();
-        Router.refresh();
-        UI.toast('Saved ✅','good');
+        close(); setProfileInitial(); Router.refresh();
+        UI.toast('Saved', 'good');
       };
       m.querySelector('#s-reset').onclick = () => {
-        if (confirm('Erase all workouts, food and weight history? This cannot be undone.')) {
-          Store.resetAll(); close(); location.reload();
-        }
+        if (confirm('Erase this profile\'s workouts, food and weight history?')) { Store.resetAll(); close(); location.reload(); }
       };
     });
   }
@@ -242,39 +291,58 @@ window.App = window.App || {};
   /* ---------- Onboarding ---------- */
   function onboard() {
     const p = Store.profile();
+    const G = App.Goals;
+    const goals = ['physique'];
     UI.modal(`
-      <h2>Welcome to Macro 💥</h2>
-      <p class="muted" style="margin-top:-8px">Your no-excuses 8-week coach: build muscle, keep the abs, summit the climb. Let's set the basics.</p>
-      ${UI.field('Your name', `<input class="input" id="o-name" placeholder="First name">`)}
+      <h2>Welcome to Macro</h2>
+      <p class="muted" style="margin-top:-8px">Pick what you're training for. The app builds your nutrition and program around it — you can change this anytime.</p>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 8px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Goal paths (pick one or more)</label>
+      ${G.goalChips(goals)}
+
+      ${UI.field('Name', `<input class="input" id="o-name" placeholder="First name" style="margin-top:14px">`)}
       <div class="inline-fields" style="margin-bottom:14px">
-        <div class="field" style="margin:0"><label>Current weight (lb)</label><input class="input" id="o-sw" type="number" value="150"></div>
-        <div class="field" style="margin:0"><label>Goal gain (lb)</label><input class="input" id="o-gg" type="number" value="10"></div>
+        <div class="field" style="margin:0"><label>Sex</label>${G.sexSelect('male')}</div>
+        <div class="field" style="margin:0"><label>Age</label><input class="input" id="o-age" type="number" placeholder="25"></div>
       </div>
-      ${UI.field('Climb / event date', `<input class="input" id="o-climb" type="date" value="${p.climbDate}">`)}
-      ${UI.field('Daily weigh-in reminder', `<input class="input" id="o-time" type="time" value="20:00">`)}
-      <button class="btn primary" id="o-start">Start my 8 weeks</button>
-      <p class="muted center" style="font-size:12px;margin-top:12px">Targets default to 3,200 cal · 180g protein — tweak anytime in Profile.</p>
+      <div class="inline-fields" style="margin-bottom:14px">
+        <div class="field" style="margin:0"><label>Height (in)</label><input class="input" id="o-h" type="number" placeholder="70"></div>
+        <div class="field" style="margin:0"><label>Weight (lb)</label><input class="input" id="o-sw" type="number" placeholder="160"></div>
+      </div>
+      ${UI.field('Activity level', G.activitySelect('moderate'))}
+      ${UI.field('Target date (optional)', `<input class="input" id="o-target" type="date">`)}
+
+      <div id="o-plan" style="margin:6px 0 14px"></div>
+      <button class="btn primary" id="o-start">Build my plan</button>
     `, (m, close) => {
-      // not dismissible by backdrop on first run
-      document.getElementById('modal-host').onclick = null;
+      document.getElementById('modal-host').onclick = null; // not dismissible on first run
+      G.wireGoalChips(m, goals);
+      const readP = () => Object.assign({}, p, {
+        sex:m.querySelector('#g-sex').value, age:+m.querySelector('#o-age').value || 25,
+        heightIn:+m.querySelector('#o-h').value || 70, activity:m.querySelector('#g-act').value,
+        targetDate:m.querySelector('#o-target').value, goals,
+      });
+      const w = () => +m.querySelector('#o-sw').value || 160;
+      const draw = () => { m.querySelector('#o-plan').innerHTML = App.Goals.planSummary(App.Goals.plan(readP(), w())); };
+      m.querySelectorAll('[data-goal], #g-sex, #o-age, #o-h, #o-sw, #g-act, #o-target').forEach(el => el.addEventListener('change', draw));
+      draw();
+
       m.querySelector('#o-start').onclick = async () => {
+        const weight = w();
         Store.setProfile({
           name: m.querySelector('#o-name').value.trim() || 'Athlete',
-          startWeight: +m.querySelector('#o-sw').value || 150,
-          goalGain: +m.querySelector('#o-gg').value || 10,
-          climbDate: m.querySelector('#o-climb').value || p.climbDate,
-          weighInTime: m.querySelector('#o-time').value || '20:00',
-          startDate: Store.todayKey(),
+          goals, sex:m.querySelector('#g-sex').value, age:+m.querySelector('#o-age').value || 25,
+          heightIn:+m.querySelector('#o-h').value || 70, activity:m.querySelector('#g-act').value,
+          startWeight: weight, targetDate: m.querySelector('#o-target').value || '',
+          startDate: Store.todayKey(), customMacros:false,
         });
+        Store.logWeight(weight);
+        App.Goals.recompute();
         Store.get().onboarded = true; Store.save();
-        // seed first weigh-in
-        Store.logWeight(+m.querySelector('#o-sw').value || 150);
         await App.Reminders.requestPermission();
         App.Reminders.start();
-        close();
-        setProfileInitial();
-        Router.go('today');
-        UI.toast('Let\'s build. 💪','good');
+        close(); setProfileInitial(); Router.go('today');
+        UI.toast('Plan ready', 'good');
       };
     });
   }

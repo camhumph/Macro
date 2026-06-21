@@ -19,19 +19,22 @@ App.Food = (function () {
     const remaining = Math.max(0, p.cal - t.cal);
     const log = Store.foodLog();
 
-    // pace hint: how much more to eat, framed by time of day
+    // pace hint: how much more to eat, framed by time of day and goal
     const hour = new Date().getHours();
+    const dir = p.weightDir || 0;
     let pace = '';
     if (remaining > 0) {
-      pace = `<b>${UI.round(remaining)} cal</b> to go today — about ${Math.max(1, Math.round(remaining/600))} more solid feeding(s).`;
-      if (hour >= 19 && remaining > 700) pace = `⚠️ It's late and you're <b>${UI.round(remaining)} cal short</b>. Grab liquid calories: milk, a shake, or PB on toast — don't go to bed under.`;
+      const protLeft = Math.max(0, p.protein - t.protein);
+      pace = `<b>${UI.round(remaining)} cal</b> left today${protLeft > 0 ? ` · ${UI.round(protLeft)}g protein to go` : ''}.`;
+      if (hour >= 19 && remaining > 600 && dir >= 0) pace = `<b>${UI.round(remaining)} cal short</b> with the day winding down — a shake or another protein-and-carb meal closes the gap.`;
     } else {
-      pace = `🎯 Target hit — <b>${UI.round(t.cal - p.cal)} over</b>. Surplus secured.`;
+      const over = UI.round(t.cal - p.cal);
+      pace = dir < 0 ? `Over target by <b>${over} cal</b> — tighten portions to stay in your deficit.` : `Target reached — <b>${over} cal</b> over.`;
     }
 
     let html = `
       <div class="hero">
-        <div class="eyebrow">Today's Fuel</div>
+        <div class="eyebrow">Today's nutrition</div>
         <div class="ring-wrap" style="margin-top:14px">
           ${UI.ring(t.cal, p.cal, UI.round(remaining), 'cal left', 'var(--accent)')}
           <div class="macro-bars">
@@ -139,7 +142,7 @@ App.Food = (function () {
   function searchSheet(presetMeal) {
     UI.modal(`
       <h2>Add Food</h2>
-      <input class="input" id="food-q" placeholder="Search foods (e.g. chipotle, rice, footlong)…" autocomplete="off">
+      <input class="input" id="food-q" placeholder="Search foods (e.g. chicken, rice, oats)…" autocomplete="off">
       <div class="btn-row" style="margin-top:10px">
         <button class="btn ghost small" id="food-bc2" style="flex:1">${barcodeIco} Barcode</button>
         <button class="btn ghost small" id="food-scan2" style="flex:1">🏷️ Label</button>

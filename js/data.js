@@ -9,8 +9,8 @@ App.DATA = (function () {
      Macros are per the listed `serving`. Quantity scales linearly.
      cal = calories, p = protein(g), c = carbs(g), f = fat(g)         */
   const FOODS = [
-    // --- The breakfast shake (coach's orders) ---
-    { id:'shake',  name:'Mass Breakfast Shake', emoji:'🥤', serving:'1 blender (milk+2 scoops+banana+2 tbsp PB)', cal:735, p:60, c:62, f:30, tags:['shake','breakfast','protein'] },
+    // --- Common items ---
+    { id:'shake',  name:'Protein Shake (milk, whey, banana, PB)', emoji:'🥤', serving:'1 blender', cal:735, p:60, c:62, f:30, tags:['shake','breakfast','protein'] },
     { id:'oatmeal',name:'Oatmeal (cooked)', emoji:'🥣', serving:'1 cup', cal:158, p:6, c:27, f:3, tags:['breakfast','carbs'] },
 
     // --- Liquids / staples ---
@@ -125,7 +125,7 @@ App.DATA = (function () {
       exercises:[ E.inclineBB, E.ohp, E.pullup, E.bbRow, E.lateral, E.bbCurl, E.pushdown, E.legRaise ]
     },
     lowerA: {
-      name:'Lower A — Squat + Punt Power',
+      name:'Lower A — Squat Focus',
       exercises:[ E.boxJump, E.squat, E.rdl, E.legPress, E.calfStand, E.cableCrunch ]
     },
     upperB: {
@@ -137,32 +137,37 @@ App.DATA = (function () {
       exercises:[ E.broadJump, E.frontSquat, E.rdl, E.bulgarian, E.legCurl, E.calfSeat, E.legRaise ]
     },
     conditioning: {
-      name:'Climb Conditioning (Optional)',
+      name:'Conditioning',
       exercises:[
         { key:'inclineWalk', name:'Incline Treadmill / Stair Climb', type:'cond', sets:1, reps:'30–45 min @ 12% incline' },
         { key:'ruck',        name:'Weighted Ruck / Hike Prep',       type:'cond', sets:1, reps:'45–60 min w/ pack' },
         { key:'abWheel2',    name:'Ab Wheel Rollout',                type:'abs',  sets:3, reps:'10–12' },
       ]
     },
-    rest: { name:'Rest / Recovery + Eat', exercises:[] }
+    rest: { name:'Rest / Recovery', exercises:[] }
   };
 
-  // Weekly schedule by JS weekday index (0=Sun ... 6=Sat).
-  // Mon Upper A, Tue Lower A, Wed rest, Thu Upper B, Fri Lower B,
-  // Sat climb conditioning, Sun rest. Heavy emphasis = upper hypertrophy.
-  const SCHEDULE = {
-    1:'upperA', 2:'lowerA', 3:'rest', 4:'upperB', 5:'lowerB', 6:'conditioning', 0:'rest'
-  };
-
-  /* ---------- PHASE / REP RULES ---------- */
-  function phaseForWeek(week) {
-    return week <= 4 ? 1 : 2;  // weeks 1–4 volume, 5–8 heavy overload
+  // Weekly schedule (JS weekday 0=Sun..6=Sat), adjusted for cardio volume.
+  // Upper/Lower base; conditioning days added as cardio emphasis rises.
+  function scheduleFor(cardio) {
+    const s = { 1:'upperA', 2:'lowerA', 3:'rest', 4:'upperB', 5:'lowerB', 6:'rest', 0:'rest' };
+    if (cardio === 'moderate') s[6] = 'conditioning';
+    if (cardio === 'high') { s[3] = 'conditioning'; s[6] = 'conditioning'; }
+    return s;
   }
-  function repScheme(exType, phase) {
-    if (exType === 'main') return phase === 1 ? { sets:null, reps:'8–10', low:8, high:10 }
-                                              : { sets:null, reps:'6–8',  low:6, high:8 };
-    if (exType === 'acc')  return phase === 1 ? { sets:null, reps:'10–12', low:10, high:12 }
-                                              : { sets:null, reps:'12–15', low:12, high:15 };
+
+  /* ---------- REP RULES by training bias ---------- */
+  // bias: 'strength' | 'power' | 'hypertrophy' | 'endurance'
+  function repScheme(exType, bias) {
+    const M = {
+      strength:    { main:{reps:'4–6', low:4, high:6},  acc:{reps:'8–10',  low:8,  high:10} },
+      power:       { main:{reps:'5–8', low:5, high:8},  acc:{reps:'10–12', low:10, high:12} },
+      hypertrophy: { main:{reps:'8–10',low:8, high:10}, acc:{reps:'12–15', low:12, high:15} },
+      endurance:   { main:{reps:'12–15',low:12,high:15},acc:{reps:'15–20', low:15, high:20} },
+    };
+    const t = M[bias] || M.hypertrophy;
+    if (exType === 'main') return { sets:null, ...t.main };
+    if (exType === 'acc')  return { sets:null, ...t.acc };
     return { reps:null }; // plyo/abs/cond use their own preset reps
   }
 
@@ -227,5 +232,5 @@ App.DATA = (function () {
     return CAT_ORDER.filter(c => groups[c]).map(c => ({ cat:c, items:groups[c] }));
   }
 
-  return { FOODS, foodById, E, DAYS, SCHEDULE, phaseForWeek, repScheme, RATIOS, ALL, exLibrary, CAT_ORDER };
+  return { FOODS, foodById, E, DAYS, scheduleFor, repScheme, RATIOS, ALL, exLibrary, CAT_ORDER };
 })();

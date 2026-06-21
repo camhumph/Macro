@@ -94,39 +94,31 @@ App.Stats = (function () {
     run();
   }
 
-  /* ---------- Program: 8-week map ---------- */
+  /* ---------- Plan: goals, nutrition, weight goal, split ---------- */
   function program(body) {
-    const curWeek = Store.weekFor();
-    const rows = [];
-    for (let w = 1; w <= 8; w++) {
-      const phase = DATA.phaseForWeek(w);
-      const main = phase === 1 ? '8–10 reps' : '6–8 reps';
-      const acc = phase === 1 ? '10–12' : '12–15';
-      rows.push(`
-        <div class="list-row">
-          <div class="lr-l">
-            <b>Week ${w} ${w===curWeek?'<span class="pill accent" style="margin-left:6px">now</span>':''}</b>
-            <small>Phase ${phase} · mains ${main} · accessories ${acc}</small>
-          </div>
-          <div class="pill ${phase===1?'':'orange'}">${phase===1?'Volume':'Heavy'}</div>
-        </div>`);
-    }
+    const G = App.Goals;
+    const pl = G.plan();
+    const cardio = pl.cardio;
+    const sched = DATA.scheduleFor(cardio);
+    const dayName = dt => dt === 'rest' ? 'Rest' : DATA.DAYS[dt].name;
+    const labels = { 1:'Mon', 2:'Tue', 3:'Wed', 4:'Thu', 5:'Fri', 6:'Sat', 0:'Sun' };
+    const order = [1,2,3,4,5,6,0];
+
     body.innerHTML = `
-      <div class="card">
-        <h2 style="margin:4px 0 12px;font-size:17px">8-Week Block · Upper/Lower</h2>
-        ${rows.join('')}
-      </div>
-      <div class="card" style="margin-top:14px;line-height:1.55">
-        <b>Weekly split</b>
-        <div class="muted" style="margin-top:8px">
-          Mon — Upper A (push)<br>Tue — Lower A (squat + punt power)<br>Wed — Rest + eat<br>
-          Thu — Upper B (pull)<br>Fri — Lower B (hinge + single leg)<br>Sat — Climb conditioning<br>Sun — Rest + eat
+      ${G.planSummary(pl)}
+      <div style="margin-top:14px">${G.guideCard(pl)}</div>
+
+      <div class="card" style="margin-top:14px;line-height:1.5">
+        <div class="spread"><b>Training split</b><span class="muted" style="font-size:12px">${G.biasLabel(pl.bias)}</span></div>
+        <div style="margin-top:10px">
+          ${order.map(d => `<div class="list-row" style="padding:9px 0"><div class="lr-l"><b>${labels[d]}</b></div><span class="muted">${dayName(sched[d])}</span></div>`).join('')}
         </div>
       </div>
-      <div class="card" style="margin-top:14px;line-height:1.55">
-        <b>Why this works for you</b>
-        <div class="muted" style="margin-top:8px">Upper-body hypertrophy drives the "ripped in a shirt" look — lateral raises, incline press and pull-ups widen the frame. Plyos keep your legs explosive for punting. Saturday incline/ruck work builds the engine for a 15k climb. Abs every session + a lean-bulk surplus keeps them visible.</div>
-      </div>`;
+
+      <button class="btn" id="plan-edit" style="margin-top:14px">Change goals & nutrition</button>
+    `;
+    const e = body.querySelector('#plan-edit');
+    if (e) e.onclick = () => App.openSettings();
   }
 
   return { page, open };

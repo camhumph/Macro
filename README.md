@@ -1,55 +1,63 @@
-# Macro — Your 8-Week Shred Coach 💥
+# Macro — Training & Nutrition
 
-A no-excuses iPhone app that runs in Safari (installable to your Home Screen — no App Store needed). Built for one mission: **build muscle, keep the abs, and summit a 15k climb in mid-August looking ripped.**
+A clean, installable iPhone web app (PWA) for goal-based training and nutrition. Open it in Safari, **Add to Home Screen**, and it runs full-screen and offline — no App Store, no account. All data stays on your device.
 
-It's a fully offline Progressive Web App — all your data stays on your phone.
+## Choose your path
 
-## What it does
+Pick one goal or combine several. Macro builds your nutrition and program around the mix:
 
-| Feature | What you get |
-|---|---|
-| **🏋️ Daily workout generator** | Your 8-week Upper/Lower split, auto-built for today. Phase 1 (Wk 1–4, volume 8–10 reps) → Phase 2 (Wk 5–8, heavy 6–8 reps). Box jumps for punt power, abs every session, Saturday climb conditioning. |
-| **✅ Checkable sets** | Log weight × reps per set, tap to check it off. It remembers and suggests progressive-overload targets next time. |
-| **📈 Strength extrapolation** | Estimates your 1-rep max (Epley) from your best set and predicts what you can lift at any rep range — *and* on lifts you haven't maxed, using strength ratios. |
-| **🍽️ Macro tracker (MyFitnessPal-style)** | Tracks calories + protein/carbs/fat toward your 3,200-cal lean-bulk target. Tells you **how much more to eat today** and warns you if you're falling behind. |
-| **🔍 Food search & 📷 photo** | Built-in database including your staples — Chipotle double-steak bowls, Subway footlongs, the Mass Breakfast Shake, orange chicken, lo mein. Snap a photo or enter custom macros. |
-| **⚖️ 8 PM weigh-in reminder** | Nags you to weigh in nightly. Adds a **recurring iPhone Calendar reminder** (.ics) so it actually fires. Charts your trend vs your goal line. |
-| **⚙️ Auto-adjusting plan** | If the scale stalls below 1 lb/week, it automatically bumps your calorie target and tells you to eat more. Gaining too fast? It tells you to ease off to protect the abs. |
-| **🗻 Climb countdown** | Days-to-climb front and center, with conditioning work to build the engine for 15k. |
+| Path | Focus | Nutrition | Training |
+|---|---|---|---|
+| **Build Muscle** | Add lean size | Controlled surplus, high protein | Hypertrophy (8–15 reps) |
+| **Get Stronger** | Maximize force | Around maintenance | Heavy compounds (4–6 reps) |
+| **Conditioning** | Build your engine | Maintenance, carb-forward | Mixed cardio + circuits |
+| **Lose Fat** | Get leaner | Moderate deficit, high protein | Hypertrophy + cardio |
 
-## Install on your iPhone
+From your goals + stats (sex, age, height, weight, activity) it computes your **maintenance (Mifflin–St Jeor TDEE)**, a **calorie target**, **macro split**, a **weight goal with a weekly rate**, and clear **eating guidance** — all editable.
+
+## Features
+
+- **Daily workout generator** — an Upper/Lower split with rep ranges and cardio volume set by your goals. Check off sets, log weight × reps, and fully customize: swap, add, or remove exercises from a 50+ movement library (changes persist).
+- **Strength estimates & prediction** — estimates your 1RM from your best sets and predicts what you can lift on other exercises and rep ranges.
+- **Nutrition tracking** — calories + protein/carbs/fat toward your target, with "how much is left today." Search a built-in food database, **scan a nutrition label** (on-device OCR), or **scan a barcode** (Open Food Facts lookup).
+- **Pantry & portions** — save a scanned food, then log portions by weight or servings (¼ · ½ · ¾ · 1); the app tracks what's left in the package. Edit any logged entry anytime.
+- **Weigh-ins** — daily reminder (with a Calendar backup), a trend chart against your goal line, and automatic calorie adjustment if your trend drifts off target.
+- **Profiles, leaderboard & achievements** — separate profiles on the device, add friends by importing the profile they share, and compete on sessions, streaks, strength, volume, and % to goal. Levels and badges included.
+- **Backup & restore** — export/import your data so it's never lost (important on iPhone, where the Home-Screen app and Safari keep separate storage).
+
+## Install on iPhone
 
 1. Host the folder (see below) and open the URL in **Safari**.
-2. Tap the **Share** button → **Add to Home Screen**.
-3. Open **Macro** from your Home Screen — it runs full-screen like a native app, even offline.
-4. On first launch, allow notifications and tap **📅 Add daily reminder to iPhone Calendar** on the Weigh-In tab for a reliable 8 PM nudge.
+2. **Share → Add to Home Screen**.
+3. Open **Macro** from your Home Screen. Set your goals on first launch.
 
-## Hosting (pick one)
+## Hosting
 
-It's all static files — no build step, no server code.
+All static files, no build step.
 
-- **GitHub Pages:** push this repo, enable Pages on the branch → done. Free HTTPS.
-- **Netlify / Vercel / Cloudflare Pages:** drag-and-drop the folder.
-- **Local test:** `python3 -m http.server 8080` then open `http://localhost:8080`.
+- **GitHub Pages:** Settings → Pages → deploy from this branch, root folder → `https://<user>.github.io/<repo>/`
+- **Netlify / Vercel / Cloudflare Pages:** drag-and-drop the folder
+- **Local:** `python3 -m http.server 8080`
 
-> A secure context (HTTPS or `localhost`) is required for the installable PWA + service worker + camera.
+A secure context (HTTPS or `localhost`) is required for install, offline, camera, and the scanners.
 
 ## Tech
 
-Vanilla HTML/CSS/JS, zero dependencies, zero build. Everything persists in `localStorage`. Files:
+Vanilla HTML/CSS/JS, zero dependencies, zero build. State persists in `localStorage`.
 
 ```
-index.html        app shell + iPhone/PWA meta
-styles.css        dark athletic design system
-manifest.json     PWA manifest      sw.js  offline service worker
-js/data.js        food DB, 8-week program, strength ratios
-js/store.js       state + persistence + program timing
-js/workout.js     workout generation + 1RM model + extrapolation
-js/food.js        macro tracker, search, photo capture
-js/weight.js      weigh-ins, trend chart, auto-adjustment
-js/reminders.js   notifications + .ics calendar reminder
-js/stats.js       strength estimates, predictor, program map
-js/ui.js          shared UI helpers     js/app.js  router + dashboard
+index.html  styles.css  manifest.json  sw.js
+js/data.js      food DB, exercise library, schedule + rep rules
+js/store.js     multi-profile state + persistence
+js/goals.js     goals + nutrition (TDEE, macros, weight goal)
+js/workout.js   workout generation, logging, editing, 1RM model
+js/food.js      nutrition tracking + entry editing
+js/scan.js      label OCR + pantry/portions
+js/barcode.js   barcode scan + Open Food Facts
+js/weight.js    weigh-ins, trend chart, auto-adjust
+js/leaderboard.js  levels, leaderboard, achievements
+js/profiles.js  profile switching + sharing
+js/reminders.js notifications + .ics
+js/stats.js     strength, prediction, plan, compete
+js/ui.js  js/app.js  shared UI + router/onboarding/settings
 ```
-
-Now go eat. Let's get to work. 💪

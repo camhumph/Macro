@@ -52,10 +52,10 @@ App.Leaderboard = (function () {
   }
   function goalPct(st) {
     const start = st.profile.startWeight;
-    const goal = start + (st.profile.goalGain || 10);
+    const goal = st.profile.targetWeight || start;
     const cur = st.weightLogs.length ? st.weightLogs[st.weightLogs.length - 1].weight : start;
-    const denom = (goal - start) || 1;
-    return UI.clamp(Math.round((cur - start) / denom * 100), 0, 100);
+    if (goal === start) return 100;   // maintenance goal
+    return UI.clamp(Math.round((cur - start) / (goal - start) * 100), 0, 100);
   }
 
   function metrics(st) {
@@ -83,7 +83,7 @@ App.Leaderboard = (function () {
   }
 
   /* ---------- achievements ---------- */
-  const RANK_TITLES = ['Rookie','Grinder','Lifter','Beast','Savage','Animal','Machine','Legend'];
+  const RANK_TITLES = ['Beginner','Novice','Intermediate','Advanced','Pro','Elite','Master','Champion'];
   function rankTitle(lvl) { return RANK_TITLES[Math.min(lvl - 1, RANK_TITLES.length - 1)]; }
 
   function achievements(st) {

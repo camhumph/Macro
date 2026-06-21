@@ -23,13 +23,16 @@ App.Store = (function () {
       profile:{
         name:'Athlete',
         emoji:'💪', color:'#c6ff3a',
-        heightIn:72,            // 6'0"
-        startWeight:150,
+        sex:'male', age:25, heightIn:70, startWeight:160,
+        activity:'moderate',
+        goals:['physique'],     // selected goal paths
         startDate:start,
-        climbDate:'2026-08-15', // mid-August 15k climb
-        goalGain:10,            // target lbs over 8 weeks
-        // Macro targets — 3,200 cal lean bulk, high protein to keep abs
-        cal:3200, protein:180, carbs:417, fat:90,
+        targetDate:'',          // optional event/target date
+        // Nutrition targets (derived from goals + stats; editable)
+        cal:2600, protein:160, carbs:300, fat:70,
+        customMacros:false,     // true once the user hand-edits macros
+        // Derived weight goal (filled by Goals.recompute)
+        weightDir:1, weeklyRate:0.6, targetWeight:165,
         weighInTime:'20:00',
         reminders:true,
       },
@@ -139,8 +142,11 @@ App.Store = (function () {
     const w = Math.floor(diff / 7) + 1;
     return Math.max(1, Math.min(8, w));
   }
-  function daysUntilClimb(dateKey) {
-    return dayDiff(dateKey || todayKey(), state.profile.climbDate);
+  // Days until the optional target date (null if none set).
+  function daysUntilTarget(dateKey) {
+    const d = state.profile.targetDate || state.profile.climbDate;
+    if (!d) return null;
+    return dayDiff(dateKey || todayKey(), d);
   }
   function daysIntoProgram(dateKey) {
     return Math.max(0, dayDiff(state.profile.startDate, dateKey || todayKey()));
@@ -270,7 +276,7 @@ App.Store = (function () {
   return {
     KEY, APP_KEY, AVATARS, COLORS, todayKey, get, save, profile, setProfile,
     profiles, activeId, switchProfile, createProfile, updateProfileMeta, deleteProfile, importAsNewProfile, allProfilesData,
-    weekFor, daysUntilClimb, daysIntoProgram, dayDiff,
+    weekFor, daysUntilTarget, daysIntoProgram, dayDiff,
     logWeight, weightToday, latestWeight,
     foodLog, addFood, updateFood, removeFood, dayTotals,
     pantry, addPantry, updatePantry, removePantry,
