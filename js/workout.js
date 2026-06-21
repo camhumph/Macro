@@ -24,9 +24,32 @@ App.Workout = (function () {
       if (scheme.high && last.reps >= scheme.high) suggest = +last.weight + 5;
     }
     return {
-      key: ex.key, name: ex.name, type: ex.type, reps, suggest, lastNote,
+      key: ex.key, name: ex.name, type: ex.type, reps, rir: scheme.rir || '',
+      muscle: ex.muscle || null, group: ex.group || null, mj: !!ex.mj, stretch: !!ex.stretch, lp: !!ex.lp,
+      suggest, lastNote,
       sets: Array.from({ length: setCount }, () => ({ weight: suggest, reps: '', done: false }))
     };
+  }
+
+  // Multi-joint first ordering (lower CNS fatigue on the big lifts), then
+  // pair antagonist movements into supersets (AAPS) for efficiency.
+  function arrange(list) {
+    const tier = e => e.type === 'plyo' ? 0 : e.type === 'main' ? 1 : e.type === 'acc' ? 2 : e.type === 'abs' ? 3 : 4;
+    const ordered = list.slice().sort((a, b) => tier(a) - tier(b));
+    const used = new Array(ordered.length).fill(false);
+    const out = []; let letter = 0;
+    for (let i = 0; i < ordered.length; i++) {
+      if (used[i]) continue;
+      const a = ordered[i]; used[i] = true;
+      const want = DATA.ANTAG[a.group];
+      let j = -1;
+      if (want) for (let k = i + 1; k < ordered.length; k++) {
+        if (!used[k] && ordered[k].group === want && ordered[k].type === a.type) { j = k; break; }
+      }
+      if (j >= 0) { const lab = String.fromCharCode(65 + letter++); a.ss = lab + '1'; ordered[j].ss = lab + '2'; used[j] = true; out.push(a, ordered[j]); }
+      else out.push(a);
+    }
+    return out;
   }
 
   function resolveDef(entry) {
@@ -43,14 +66,15 @@ App.Workout = (function () {
     const pl = App.Goals.plan();
     const bias = pl.bias;
     const dow = new Date(dateKey + 'T00:00:00').getDay();
-    const dayType = DATA.scheduleFor(pl.cardio)[dow];
+    const dayType = DATA.buildSchedule(pl.split, pl.days, pl.cardio)[dow];
     const day = DATA.DAYS[dayType];
 
     if (existing && existing.dayType === dayType) return existing;
 
     const ov = Store.getProgramOverride(dayType);
     const defs = ov ? ov.map(resolveDef).filter(Boolean) : day.exercises;
-    const exercises = defs.map(ex => makeInstance(ex, bias));
+    let exercises = defs.map(ex => makeInstance(ex, bias));
+    if (!ov) exercises = arrange(exercises);   // MJ-first + supersets for default templates
     return { dateKey, week, bias, planTitle: pl.title, dayType, dayName: day.name, exercises, customized: !!ov };
   }
 
@@ -87,6 +111,10 @@ App.Workout = (function () {
     `;
 
     if (editMode) html += recoBanner();
+    if (!editMode) {
+      html += volumeWarn();
+      if (current.exercises.some(e => e.ss)) html += `<div class="banner info" style="margin-bottom:12px"><span class="b-ico">🔁</span><div><b>Supersets</b>Pairs marked A1/A2, B1/B2… are antagonist supersets — do them back-to-back with short rest.</div></div>`;
+    }
 
     current.exercises.forEach((ex, i) => { html += editMode ? exerciseCardEdit(ex, i) : exerciseCard(ex, i); });
 
@@ -133,15 +161,33 @@ App.Workout = (function () {
           </button>
         </div>`).join('');
     }
+    const meta = `${ex.type === 'cond' ? '' : setCount + ' sets × '}${UI.esc(ex.reps)}${ex.rir ? ` · ${UI.esc(ex.rir)}` : ''}`;
+    const cue = ex.lp ? 'Take the last set to failure, then add lengthened partials in the stretch.'
+      : ex.stretch ? 'Control the stretch — load the muscle at its longest length.' : '';
     return `
     <div class="ex-card ${cardDone ? 'done' : ''}">
       <div class="ex-head">
-        <div><h3>${UI.esc(ex.name)}</h3><div class="ex-meta">${ex.type === 'cond' ? '' : setCount + ' sets × '} ${UI.esc(ex.reps)}</div></div>
+        <div>
+          <h3>${ex.ss ? `<span class="ss-chip">${ex.ss}</span>` : ''}${UI.esc(ex.name)}${ex.stretch ? ' <span class="stretch-tag">stretch</span>' : ''}</h3>
+          <div class="ex-meta">${meta}</div>
+        </div>
         <span class="ex-tag ${tag.cls}">${tag.txt}</span>
       </div>
       ${inner}
+      ${cue ? `<div class="last-hint suggest">${cue}</div>` : ''}
       ${ex.lastNote ? `<div class="last-hint">${UI.esc(ex.lastNote)} · <span class="suggest">target ${ex.suggest || '—'} lb</span></div>` : (ex.type !== 'cond' ? `<div class="last-hint">First time — log it to start tracking.</div>` : '')}
     </div>`;
+  }
+
+  // Per-muscle session volume; warn past ~8 hard sets (junk volume).
+  function volumeWarn() {
+    const by = {};
+    current.exercises.forEach(ex => {
+      if (ex.muscle && ex.type !== 'cond' && ex.type !== 'plyo') by[ex.muscle] = (by[ex.muscle] || 0) + ex.sets.length;
+    });
+    const over = Object.entries(by).filter(([, n]) => n > 8);
+    if (!over.length) return '';
+    return `<div class="banner warn" style="margin-bottom:12px"><span class="b-ico">⚠️</span><div><b>High session volume</b>${over.map(([m, n]) => `${n} sets ${m}`).join(', ')} — past ~8 hard sets for one muscle in a session adds fatigue with little extra growth.</div></div>`;
   }
 
   function exerciseCardEdit(ex, i) {

@@ -66,6 +66,13 @@ App.Goals = (function () {
     return { calAdj, dir, rate, proteinPerLb, fatPerLb, cardio, bias, keys: sel.map(g => g.key) };
   }
 
+  // default split when the user hasn't chosen one ('auto')
+  function defaultSplit(keys, cardio) {
+    if (keys.length === 1 && keys[0] === 'conditioning') return 'fullbody';
+    if (cardio === 'high') return 'fullbody';
+    return 'upperlower';
+  }
+
   function horizonWeeks(profile) {
     if (profile.targetDate) {
       const d = Store.dayDiff(Store.todayKey(), profile.targetDate);
@@ -87,9 +94,12 @@ App.Goals = (function () {
     const weeklyRate = c.dir === 0 ? 0 : +(c.rate * weight).toFixed(1);
     const horizon = horizonWeeks(profile);
     const targetWeight = c.dir === 0 ? Math.round(weight) : Math.round(weight + c.dir * weeklyRate * horizon);
+    const split = (profile.split && profile.split !== 'auto') ? profile.split : defaultSplit(c.keys, c.cardio);
+    const days = profile.daysPerWeek || App.DATA.SPLITS[split].defaultDays;
     return {
       tdee: Math.round(tdeeVal), cal, protein, carbs, fat,
       dir: c.dir, weeklyRate, targetWeight, horizon, bias: c.bias, cardio: c.cardio,
+      split, days, splitName: App.DATA.SPLITS[split].name,
       keys: c.keys, title: titleFor(c.keys), guide: guideFor(c, weeklyRate),
     };
   }
@@ -168,9 +178,24 @@ App.Goals = (function () {
         <div class="divider"></div>
         <div class="spread"><span class="muted">Weight goal</span><b>${dirTxt}</b></div>
         <div class="spread" style="margin-top:6px"><span class="muted">Target rate</span><b>${rate}</b></div>
-        <div class="spread" style="margin-top:6px"><span class="muted">Training</span><b>${biasLabel(pl.bias)}</b></div>
+        <div class="spread" style="margin-top:6px"><span class="muted">Split</span><b>${pl.splitName} · ${pl.days}×/wk</b></div>
+        <div class="spread" style="margin-top:6px"><span class="muted">Emphasis</span><b>${biasLabel(pl.bias)}</b></div>
         <div class="spread" style="margin-top:6px"><span class="muted">Maintenance</span><b>~${pl.tdee} cal</b></div>
       </div>`;
+  }
+
+  function splitSelect(v) {
+    const S = App.DATA.SPLITS;
+    return `<select class="input" id="g-split">
+      <option value="auto" ${!v||v==='auto'?'selected':''}>Auto (recommended)</option>
+      ${Object.keys(S).map(k => `<option value="${k}" ${k===v?'selected':''}>${S[k].name}</option>`).join('')}
+    </select>`;
+  }
+  function daysSelect(v) {
+    return `<select class="input" id="g-days">
+      <option value="0" ${!v?'selected':''}>Auto</option>
+      ${[2,3,4,5,6].map(n => `<option value="${n}" ${+v===n?'selected':''}>${n} days / week</option>`).join('')}
+    </select>`;
   }
   function macroPill(name, g) {
     return `<div class="macro-pill"><b>${g}g</b><small>${name}</small></div>`;
@@ -180,5 +205,5 @@ App.Goals = (function () {
   }
 
   return { GOALS, GOAL_ORDER, ACTIVITY, tdee, plan, recompute, biasLabel,
-           goalChips, wireGoalChips, sexSelect, activitySelect, planSummary, guideCard };
+           goalChips, wireGoalChips, sexSelect, activitySelect, splitSelect, daysSelect, planSummary, guideCard };
 })();

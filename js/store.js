@@ -26,6 +26,8 @@ App.Store = (function () {
         sex:'male', age:25, heightIn:70, startWeight:160,
         activity:'moderate',
         goals:['physique'],     // selected goal paths
+        split:'auto',           // 'auto' | 'fullbody' | 'upperlower' | 'ppl'
+        daysPerWeek:0,          // 0 = derive from split
         startDate:start,
         targetDate:'',          // optional event/target date
         // Nutrition targets (derived from goals + stats; editable)

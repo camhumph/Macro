@@ -136,6 +136,32 @@ App.DATA = (function () {
       name:'Lower B — Hinge + Single Leg',
       exercises:[ E.broadJump, E.frontSquat, E.rdl, E.bulgarian, E.legCurl, E.calfSeat, E.legRaise ]
     },
+    // Push / Pull / Legs (6-day split). Long-muscle-length emphasis.
+    push: {
+      name:'Push — Chest, Shoulders, Triceps',
+      exercises:[ E.inclineBB, E.ohp, E.inclineDB, E.lateral, E.pushdown ]
+    },
+    pull: {
+      name:'Pull — Back, Rear Delts, Biceps',
+      exercises:[ E.pullup, E.bbRow, E.csRow, E.facepull, E.inclineCurl ]
+    },
+    legs: {
+      name:'Legs — Quads, Hamstrings, Calves',
+      exercises:[ E.squat, E.rdl, E.legPress, E.legCurl, E.calfStand, E.cableCrunch ]
+    },
+    // Full-body (3-day split). Big compounds first, one stretch-focused accessory.
+    fullA: {
+      name:'Full Body A',
+      exercises:[ E.squat, E.flatBench, E.bbRow, E.lateral, E.legRaise ]
+    },
+    fullB: {
+      name:'Full Body B',
+      exercises:[ E.rdl, E.ohp, E.pullup, E.inclineCurl, E.calfStand ]
+    },
+    fullC: {
+      name:'Full Body C',
+      exercises:[ E.frontSquat, E.inclineDB, E.csRow, E.pushdown, E.cableCrunch ]
+    },
     conditioning: {
       name:'Conditioning',
       exercises:[
@@ -147,23 +173,37 @@ App.DATA = (function () {
     rest: { name:'Rest / Recovery', exercises:[] }
   };
 
-  // Weekly schedule (JS weekday 0=Sun..6=Sat), adjusted for cardio volume.
-  // Upper/Lower base; conditioning days added as cardio emphasis rises.
-  function scheduleFor(cardio) {
-    const s = { 1:'upperA', 2:'lowerA', 3:'rest', 4:'upperB', 5:'lowerB', 6:'rest', 0:'rest' };
-    if (cardio === 'moderate') s[6] = 'conditioning';
-    if (cardio === 'high') { s[3] = 'conditioning'; s[6] = 'conditioning'; }
-    return s;
+  /* ---------- SPLITS & SCHEDULE ---------- */
+  const SPLITS = {
+    fullbody:   { name:'Full Body',  rotation:['fullA','fullB','fullC'],          defaultDays:3 },
+    upperlower: { name:'Upper/Lower', rotation:['upperA','lowerA','upperB','lowerB'], defaultDays:4 },
+    ppl:        { name:'Push/Pull/Legs', rotation:['push','pull','legs'],         defaultDays:6 },
+  };
+  // Preferred training weekdays for N days/week (1=Mon … 6=Sat, 0=Sun).
+  const DAY_PATTERNS = { 2:[1,4], 3:[1,3,5], 4:[1,2,4,5], 5:[1,2,3,4,6], 6:[1,2,3,4,5,6] };
+
+  // Build a weekday→dayType map from split, days/week, and cardio volume.
+  function buildSchedule(split, days, cardio) {
+    const cfg = SPLITS[split] || SPLITS.upperlower;
+    const rot = cfg.rotation;
+    days = days || cfg.defaultDays;
+    const pat = DAY_PATTERNS[days] || DAY_PATTERNS[4];
+    const map = { 0:'rest', 1:'rest', 2:'rest', 3:'rest', 4:'rest', 5:'rest', 6:'rest' };
+    pat.forEach((d, i) => { map[d] = rot[i % rot.length]; });
+    const restDays = [1, 2, 3, 4, 5, 6, 0].filter(d => map[d] === 'rest');
+    const cc = cardio === 'high' ? 2 : cardio === 'moderate' ? 1 : 0;
+    restDays.slice(0, cc).forEach(d => { map[d] = 'conditioning'; });
+    return map;
   }
 
-  /* ---------- REP RULES by training bias ---------- */
+  /* ---------- REP RULES by training bias (with RIR / proximity-to-failure) ---------- */
   // bias: 'strength' | 'power' | 'hypertrophy' | 'endurance'
   function repScheme(exType, bias) {
     const M = {
-      strength:    { main:{reps:'4–6', low:4, high:6},  acc:{reps:'8–10',  low:8,  high:10} },
-      power:       { main:{reps:'5–8', low:5, high:8},  acc:{reps:'10–12', low:10, high:12} },
-      hypertrophy: { main:{reps:'8–10',low:8, high:10}, acc:{reps:'12–15', low:12, high:15} },
-      endurance:   { main:{reps:'12–15',low:12,high:15},acc:{reps:'15–20', low:15, high:20} },
+      strength:    { main:{reps:'4–6', low:4, high:6, rir:'1–2 RIR'},  acc:{reps:'6–8',  low:6,  high:8,  rir:'1–2 RIR'} },
+      power:       { main:{reps:'5–8', low:5, high:8, rir:'1–3 RIR'},  acc:{reps:'8–12', low:8,  high:12, rir:'1–2 RIR'} },
+      hypertrophy: { main:{reps:'6–10',low:6, high:10,rir:'1–2 RIR'},  acc:{reps:'10–15',low:10, high:15, rir:'0–2 RIR'} },
+      endurance:   { main:{reps:'12–15',low:12,high:15,rir:'1–2 RIR'}, acc:{reps:'15–20',low:15, high:20, rir:'0–1 RIR'} },
     };
     const t = M[bias] || M.hypertrophy;
     if (exType === 'main') return { sets:null, ...t.main };
@@ -225,6 +265,44 @@ App.DATA = (function () {
   };
   Object.keys(ALL).forEach(k => { ALL[k].cat = CAT[k] || 'Other'; });
 
+  /* ---------- biomechanics metadata (volume counting, supersets, stretch) ---------- */
+  // primary muscle (for per-muscle volume counting)
+  const MUSCLE = {
+    inclineBB:'chest', flatBench:'chest', inclineDB:'chest', dbBench:'chest', weightedDip:'chest', cableFly:'chest',
+    ohp:'delts', lateral:'side delts', cableLat:'side delts', facepull:'rear delts', rearDelt:'rear delts',
+    pullup:'back', latPull:'back', bbRow:'back', csRow:'back', tbar:'back', seatedRow:'back',
+    bbCurl:'biceps', inclineCurl:'biceps', preacher:'biceps', hammerCurl:'biceps',
+    pushdown:'triceps', skull:'triceps', ropePush:'triceps',
+    squat:'quads', frontSquat:'quads', legPress:'quads', hackSquat:'quads', legExt:'quads', bulgarian:'quads', walkLunge:'quads',
+    rdl:'hamstrings', legCurl:'hamstrings', hipThrust:'glutes',
+    calfStand:'calves', calfSeat:'calves',
+    boxJump:'power', broadJump:'power',
+    legRaise:'core', cableCrunch:'core', plank:'core', abWheel:'core', abWheel2:'core', russian:'core', deadbug:'core',
+  };
+  // antagonist group, for agonist-antagonist paired sets (supersets)
+  const GROUP = {
+    inclineBB:'horizPush', flatBench:'horizPush', inclineDB:'horizPush', dbBench:'horizPush', weightedDip:'horizPush', cableFly:'horizPush',
+    ohp:'vertPush', bbRow:'horizPull', csRow:'horizPull', tbar:'horizPull', seatedRow:'horizPull',
+    pullup:'vertPull', latPull:'vertPull',
+    bbCurl:'biceps', inclineCurl:'biceps', preacher:'biceps', hammerCurl:'biceps',
+    pushdown:'triceps', skull:'triceps', ropePush:'triceps',
+    squat:'quad', frontSquat:'quad', legPress:'quad', hackSquat:'quad', legExt:'quad', bulgarian:'quad', walkLunge:'quad',
+    rdl:'ham', legCurl:'ham',
+  };
+  const ANTAG = { horizPush:'horizPull', horizPull:'horizPush', vertPush:'vertPull', vertPull:'vertPush', quad:'ham', ham:'quad', biceps:'triceps', triceps:'biceps' };
+  // exercises that load the muscle hard at long lengths (stretch-mediated hypertrophy)
+  const STRETCH = new Set(['inclineBB','inclineDB','dbBench','cableFly','rdl','legCurl','squat','frontSquat','bulgarian','walkLunge','legPress','inclineCurl','skull','ropePush','latPull','pullup','calfSeat','calfStand']);
+  // exercises where lengthened partials past failure add useful volume
+  const LP = new Set(['lateral','cableLat','legExt','calfStand','calfSeat','pushdown','ropePush','bbCurl','rearDelt','facepull']);
+  Object.keys(ALL).forEach(k => {
+    const ex = ALL[k];
+    ex.muscle = MUSCLE[k] || null;
+    ex.group = GROUP[k] || null;
+    ex.mj = ex.type === 'main';            // multi-joint compound
+    ex.stretch = STRETCH.has(k);
+    ex.lp = LP.has(k);
+  });
+
   const CAT_ORDER = ['Chest','Back','Shoulders','Arms','Legs','Core','Power','Cardio','Other'];
   function exLibrary() {
     const groups = {};
@@ -232,5 +310,5 @@ App.DATA = (function () {
     return CAT_ORDER.filter(c => groups[c]).map(c => ({ cat:c, items:groups[c] }));
   }
 
-  return { FOODS, foodById, E, DAYS, scheduleFor, repScheme, RATIOS, ALL, exLibrary, CAT_ORDER };
+  return { FOODS, foodById, E, DAYS, SPLITS, buildSchedule, repScheme, RATIOS, ANTAG, ALL, exLibrary, CAT_ORDER };
 })();

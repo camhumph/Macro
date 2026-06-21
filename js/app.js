@@ -129,6 +129,10 @@ window.App = window.App || {};
         <div class="field" style="margin:0"><label>Current weight (lb)</label><input class="input" id="s-sw" type="number" value="${UI.round(Store.latestWeight())}"></div>
       </div>
       ${UI.field('Activity level', G.activitySelect(p.activity))}
+      <div class="inline-fields" style="margin-bottom:14px">
+        <div class="field" style="margin:0"><label>Training split</label>${G.splitSelect(p.split)}</div>
+        <div class="field" style="margin:0"><label>Days / week</label>${G.daysSelect(p.daysPerWeek)}</div>
+      </div>
       ${UI.field('Target date (optional)', `<input class="input" id="s-target" type="date" value="${p.targetDate||''}">`)}
 
       <div class="divider"></div>
@@ -180,6 +184,7 @@ window.App = window.App || {};
       const readStats = () => ({
         sex: m.querySelector('#g-sex').value, age:+m.querySelector('#s-age').value || p.age,
         heightIn:+m.querySelector('#s-h').value || p.heightIn, activity:m.querySelector('#g-act').value,
+        split:m.querySelector('#g-split').value, daysPerWeek:+m.querySelector('#g-days').value || 0,
         targetDate:m.querySelector('#s-target').value, goals, startWeight:+m.querySelector('#s-sw').value || Store.latestWeight(),
       });
       const drawPlan = () => {
@@ -188,7 +193,7 @@ window.App = window.App || {};
         m.querySelector('#s-guide').innerHTML = App.Goals.guideCard(pl);
       };
       m.querySelector('#s-recalc').onclick = drawPlan;
-      m.querySelectorAll('[data-goal], #g-sex, #s-age, #s-h, #s-sw, #g-act, #s-target').forEach(el => el.addEventListener('change', drawPlan));
+      m.querySelectorAll('[data-goal], #g-sex, #s-age, #s-h, #s-sw, #g-act, #g-split, #g-days, #s-target').forEach(el => el.addEventListener('change', drawPlan));
       drawPlan();
 
       m.querySelector('#s-export').onclick = exportBackup;
@@ -204,6 +209,8 @@ window.App = window.App || {};
           age: +m.querySelector('#s-age').value || p.age,
           heightIn: +m.querySelector('#s-h').value || p.heightIn,
           activity: m.querySelector('#g-act').value,
+          split: m.querySelector('#g-split').value,
+          daysPerWeek: +m.querySelector('#g-days').value || 0,
           targetDate: m.querySelector('#s-target').value || '',
           weighInTime: m.querySelector('#s-time').value || p.weighInTime,
           reminders: wantRem,
@@ -310,6 +317,10 @@ window.App = window.App || {};
         <div class="field" style="margin:0"><label>Weight (lb)</label><input class="input" id="o-sw" type="number" placeholder="160"></div>
       </div>
       ${UI.field('Activity level', G.activitySelect('moderate'))}
+      <div class="inline-fields" style="margin-bottom:14px">
+        <div class="field" style="margin:0"><label>Training split</label>${G.splitSelect('auto')}</div>
+        <div class="field" style="margin:0"><label>Days / week</label>${G.daysSelect(0)}</div>
+      </div>
       ${UI.field('Target date (optional)', `<input class="input" id="o-target" type="date">`)}
 
       <div id="o-plan" style="margin:6px 0 14px"></div>
@@ -320,11 +331,12 @@ window.App = window.App || {};
       const readP = () => Object.assign({}, p, {
         sex:m.querySelector('#g-sex').value, age:+m.querySelector('#o-age').value || 25,
         heightIn:+m.querySelector('#o-h').value || 70, activity:m.querySelector('#g-act').value,
+        split:m.querySelector('#g-split').value, daysPerWeek:+m.querySelector('#g-days').value || 0,
         targetDate:m.querySelector('#o-target').value, goals,
       });
       const w = () => +m.querySelector('#o-sw').value || 160;
       const draw = () => { m.querySelector('#o-plan').innerHTML = App.Goals.planSummary(App.Goals.plan(readP(), w())); };
-      m.querySelectorAll('[data-goal], #g-sex, #o-age, #o-h, #o-sw, #g-act, #o-target').forEach(el => el.addEventListener('change', draw));
+      m.querySelectorAll('[data-goal], #g-sex, #o-age, #o-h, #o-sw, #g-act, #g-split, #g-days, #o-target').forEach(el => el.addEventListener('change', draw));
       draw();
 
       m.querySelector('#o-start').onclick = async () => {
@@ -333,6 +345,7 @@ window.App = window.App || {};
           name: m.querySelector('#o-name').value.trim() || 'Athlete',
           goals, sex:m.querySelector('#g-sex').value, age:+m.querySelector('#o-age').value || 25,
           heightIn:+m.querySelector('#o-h').value || 70, activity:m.querySelector('#g-act').value,
+          split:m.querySelector('#g-split').value, daysPerWeek:+m.querySelector('#g-days').value || 0,
           startWeight: weight, targetDate: m.querySelector('#o-target').value || '',
           startDate: Store.todayKey(), customMacros:false,
         });

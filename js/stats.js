@@ -98,24 +98,35 @@ App.Stats = (function () {
   function program(body) {
     const G = App.Goals;
     const pl = G.plan();
-    const cardio = pl.cardio;
-    const sched = DATA.scheduleFor(cardio);
+    const sched = DATA.buildSchedule(pl.split, pl.days, pl.cardio);
     const dayName = dt => dt === 'rest' ? 'Rest' : DATA.DAYS[dt].name;
     const labels = { 1:'Mon', 2:'Tue', 3:'Wed', 4:'Thu', 5:'Fri', 6:'Sat', 0:'Sun' };
     const order = [1,2,3,4,5,6,0];
+    const volTarget = pl.bias === 'strength' ? '4–6 hard sets per movement per week' : '10–20 hard sets per muscle per week';
 
     body.innerHTML = `
       ${G.planSummary(pl)}
       <div style="margin-top:14px">${G.guideCard(pl)}</div>
 
       <div class="card" style="margin-top:14px;line-height:1.5">
-        <div class="spread"><b>Training split</b><span class="muted" style="font-size:12px">${G.biasLabel(pl.bias)}</span></div>
+        <div class="spread"><b>${pl.splitName} · ${pl.days}×/week</b><span class="muted" style="font-size:12px">${G.biasLabel(pl.bias)}</span></div>
         <div style="margin-top:10px">
           ${order.map(d => `<div class="list-row" style="padding:9px 0"><div class="lr-l"><b>${labels[d]}</b></div><span class="muted">${dayName(sched[d])}</span></div>`).join('')}
         </div>
       </div>
 
-      <button class="btn" id="plan-edit" style="margin-top:14px">Change goals & nutrition</button>
+      <div class="card" style="margin-top:14px;line-height:1.55">
+        <b>How it's programmed</b>
+        <ul class="guide-list">
+          <li>Volume target: <b>${volTarget}</b>; cap ~6–8 hard sets per muscle in any one session to avoid junk volume.</li>
+          <li>Big multi-joint lifts go first, while you're fresh, for the most strength carryover.</li>
+          <li>Antagonist movements are paired into supersets to save time and lift output.</li>
+          <li>Stretch-focused exercises load the muscle at long lengths; add lengthened partials past failure where flagged.</li>
+          <li>Train each muscle ~2× per week and progress weight or reps when you hit the top of the range.</li>
+        </ul>
+      </div>
+
+      <button class="btn" id="plan-edit" style="margin-top:14px">Change goals, split & nutrition</button>
     `;
     const e = body.querySelector('#plan-edit');
     if (e) e.onclick = () => App.openSettings();
