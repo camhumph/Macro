@@ -272,6 +272,7 @@ a{color:var(--accent-3)}
 .lb-val{text-align:right;font-weight:800;font-size:16px;flex:none}
 .lb-val small{display:block;color:var(--faint);font-weight:500;font-size:10px}
 .search-result.me{border-color:rgba(198,255,58,.4);background:rgba(198,255,58,.06)}
+.search-result.rec{border-color:var(--accent);background:linear-gradient(180deg,rgba(198,255,58,.1),transparent)}
 
 .badge-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .badge{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center;opacity:.55;filter:grayscale(.6)}

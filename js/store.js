@@ -28,6 +28,7 @@ App.Store = (function () {
         goals:['physique'],     // selected goal paths
         split:'auto',           // 'auto' | 'fullbody' | 'upperlower' | 'ppl'
         daysPerWeek:0,          // 0 = derive from split
+        scheduleMode:'flexible',// 'flexible' (next-in-rotation, adapts) | 'fixed' (weekday-based)
         startDate:start,
         targetDate:'',          // optional event/target date
         // Nutrition targets (derived from goals + stats; editable)
@@ -231,11 +232,15 @@ App.Store = (function () {
   function setProgramOverride(dayType, list) { state.programOverrides[dayType] = list; save(); }
   function clearProgramOverride(dayType) { delete state.programOverrides[dayType]; save(); }
 
-  /* ---------- per-day workout choice (manually picked workout) ---------- */
-  function getDayChoice(dateKey) { return state.dayChoices[dateKey || todayKey()] || null; }
-  function setDayChoice(dateKey, dayType) {
+  /* ---------- per-day workout choice (manually picked / adapted) ---------- */
+  function getDayChoice(dateKey) {
+    const c = state.dayChoices[dateKey || todayKey()];
+    if (!c) return null;
+    return typeof c === 'string' ? { type: c, deload: false } : c;
+  }
+  function setDayChoice(dateKey, dayType, deload) {
     dateKey = dateKey || todayKey();
-    state.dayChoices[dateKey] = dayType;
+    state.dayChoices[dateKey] = { type: dayType, deload: !!deload };
     delete state.workoutLogs[dateKey];   // start the chosen session fresh
     save();
   }
@@ -244,6 +249,14 @@ App.Store = (function () {
     delete state.dayChoices[dateKey];
     delete state.workoutLogs[dateKey];
     save();
+  }
+  // Dates with a completed lifting session (≥1 done set, not rest/cardio), sorted.
+  function trainingDates() {
+    return Object.keys(state.workoutLogs).filter(dk => {
+      const log = state.workoutLogs[dk];
+      if (!log || log.dayType === 'rest' || log.dayType === 'conditioning') return false;
+      return (log.exercises || []).some(ex => (ex.sets || []).some(s => s.done));
+    }).sort();
   }
 
   /* ---------- workouts ---------- */
@@ -299,7 +312,7 @@ App.Store = (function () {
     foodLog, addFood, updateFood, removeFood, dayTotals,
     pantry, addPantry, updatePantry, removePantry,
     getProgramOverride, setProgramOverride, clearProgramOverride,
-    getDayChoice, setDayChoice, clearDayChoice,
+    getDayChoice, setDayChoice, clearDayChoice, trainingDates,
     importState, requestPersist,
     workoutLog, saveWorkout, exerciseHistory,
     resetAll,

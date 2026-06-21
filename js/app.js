@@ -133,6 +133,10 @@ window.App = window.App || {};
         <div class="field" style="margin:0"><label>Training split</label>${G.splitSelect(p.split)}</div>
         <div class="field" style="margin:0"><label>Days / week</label>${G.daysSelect(p.daysPerWeek)}</div>
       </div>
+      <div class="list-row">
+        <div class="lr-l"><b>Adaptive schedule</b><small>Always show the next workout — never fall behind if you miss a day</small></div>
+        <div class="switch ${p.scheduleMode!=='fixed'?'on':''}" id="s-flex"></div>
+      </div>
       ${UI.field('Target date (optional)', `<input class="input" id="s-target" type="date" value="${p.targetDate||''}">`)}
 
       <div class="divider"></div>
@@ -177,6 +181,7 @@ window.App = window.App || {};
     `, (m, close) => {
       G.wireGoalChips(m, goals);
       const rem = m.querySelector('#s-rem'); rem.onclick = () => rem.classList.toggle('on');
+      const flex = m.querySelector('#s-flex'); flex.onclick = () => flex.classList.toggle('on');
       const custom = m.querySelector('#s-custom');
       custom.onclick = () => { custom.classList.toggle('on'); m.querySelector('#s-macros').classList.toggle('hidden', !custom.classList.contains('on')); };
 
@@ -211,6 +216,7 @@ window.App = window.App || {};
           activity: m.querySelector('#g-act').value,
           split: m.querySelector('#g-split').value,
           daysPerWeek: +m.querySelector('#g-days').value || 0,
+          scheduleMode: flex.classList.contains('on') ? 'flexible' : 'fixed',
           targetDate: m.querySelector('#s-target').value || '',
           weighInTime: m.querySelector('#s-time').value || p.weighInTime,
           reminders: wantRem,

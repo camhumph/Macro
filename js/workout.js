@@ -66,10 +66,21 @@ App.Workout = (function () {
     const pl = App.Goals.plan();
     const bias = pl.bias;
     const dow = new Date(dateKey + 'T00:00:00').getDay();
-    const scheduled = DATA.buildSchedule(pl.split, pl.days, pl.cardio)[dow];
-    const chosen = Store.getDayChoice(dateKey);          // manual override for this day
-    const dayType = (chosen && DATA.DAYS[chosen]) ? chosen : scheduled;
-    const day = DATA.DAYS[dayType];
+    const rotation = (DATA.SPLITS[pl.split] || DATA.SPLITS.upperlower).rotation;
+    const mode = Store.profile().scheduleMode || 'flexible';
+    const choice = Store.getDayChoice(dateKey);   // manual override / adapt for this day
+
+    let dayType, deload = false;
+    if (choice && DATA.DAYS[choice.type]) {
+      dayType = choice.type; deload = choice.deload;
+    } else if (mode === 'flexible') {
+      // Adaptive: show the next workout in the rotation. Missing a day never
+      // desyncs you — once you start today it pins, otherwise it's "next up".
+      dayType = existing ? existing.dayType : rotation[Store.trainingDates().length % rotation.length];
+    } else {
+      dayType = DATA.buildSchedule(pl.split, pl.days, pl.cardio)[dow];
+    }
+    const day = DATA.DAYS[dayType] || DATA.DAYS.rest;
 
     if (existing && existing.dayType === dayType) return existing;
 
@@ -77,7 +88,12 @@ App.Workout = (function () {
     const defs = ov ? ov.map(resolveDef).filter(Boolean) : day.exercises;
     let exercises = defs.map(ex => makeInstance(ex, bias));
     if (!ov) exercises = arrange(exercises);   // MJ-first + supersets for default templates
-    return { dateKey, week, bias, planTitle: pl.title, dayType, dayName: day.name, exercises, customized: !!ov, switched: !!chosen };
+    if (deload) exercises.forEach(ex => {
+      if (ex.type === 'cond') return;
+      if (ex.sets.length > 2) ex.sets.pop();   // trim a set
+      ex.rir = '3–4 RIR · deload';
+    });
+    return { dateKey, week, bias, planTitle: pl.title, dayType, dayName: day.name, exercises, customized: !!ov, switched: !!choice, deload };
   }
 
   function persist() { if (current) Store.saveWorkout(current.dateKey, current); }
@@ -118,6 +134,7 @@ App.Workout = (function () {
 
     if (editMode) html += recoBanner();
     if (!editMode) {
+      if (current.deload) html += `<div class="banner info" style="margin-bottom:12px"><span class="b-ico">🪫</span><div><b>Deload day</b>Reduced volume and lighter effort (leave 3–4 reps in reserve). Use it to recover while keeping the groove.</div></div>`;
       html += volumeWarn();
       if (current.exercises.some(e => e.ss)) html += `<div class="banner info" style="margin-bottom:12px"><span class="b-ico">🔁</span><div><b>Supersets</b>Pairs marked A1/A2, B1/B2… are antagonist supersets — do them back-to-back with short rest.</div></div>`;
     }
@@ -274,11 +291,42 @@ App.Workout = (function () {
     { label: 'Full Body', items: ['fullA', 'fullB', 'fullC'] },
     { label: 'Other', items: ['conditioning', 'rest'] },
   ];
+  // Next workout in the rotation (what "adaptive" recommends today).
+  function nextRotationType() {
+    const pl = App.Goals.plan();
+    const rot = (DATA.SPLITS[pl.split] || DATA.SPLITS.upperlower).rotation;
+    return rot[Store.trainingDates().length % rot.length];
+  }
+  // A session that avoids a sore area.
+  function complementFor(soreArea) {
+    if (soreArea === 'legs') return 'upperA';
+    if (soreArea === 'upper') return 'legs';
+    if (soreArea === 'push') return 'pull';
+    if (soreArea === 'pull') return 'push';
+    return 'conditioning';
+  }
+
   function switchSheet(container) {
     const cur = current ? current.dayType : null;
+    const next = nextRotationType();
+    const nextName = DATA.DAYS[next].name;
     UI.modal(`
-      <h2>Choose today's workout</h2>
-      <p class="muted" style="margin:-8px 0 14px;font-size:13px">Pick any session for today — this overrides the schedule for this day only.</p>
+      <h2>Today's workout</h2>
+      <p class="muted" style="margin:-8px 0 14px;font-size:13px">Pick what to train today, or let it adapt to how you feel. This only changes today.</p>
+
+      <div class="meal-head"><b>Recommended</b><span></span></div>
+      <div class="search-result rec" data-day="${next}">
+        <div class="sr-main"><b>${UI.esc(nextName)}</b><small>Next up in your rotation</small></div>
+        <div style="color:var(--accent);font-size:22px">→</div>
+      </div>
+
+      <div class="meal-head"><b>Adjust for how you feel</b><span></span></div>
+      <div class="search-result" data-adapt="deload"><div class="sr-main"><b>Sore or tired — go lighter</b><small>Deload: fewer sets, leave 3–4 reps in reserve</small></div><div style="font-size:20px">🪫</div></div>
+      <div class="search-result" data-sore="legs"><div class="sr-main"><b>Legs are sore — train upper</b><small>Switch to an upper-body session</small></div><div style="font-size:20px">💪</div></div>
+      <div class="search-result" data-sore="upper"><div class="sr-main"><b>Upper is sore — train legs</b><small>Switch to a leg session</small></div><div style="font-size:20px">🦵</div></div>
+      <div class="search-result" data-day="conditioning"><div class="sr-main"><b>Active recovery</b><small>Easy cardio / conditioning instead</small></div><div style="font-size:20px">🏃</div></div>
+      <div class="search-result" data-day="rest"><div class="sr-main"><b>Take a rest day</b><small>Full recovery</small></div><div style="font-size:20px">🛌</div></div>
+
       ${SWITCH_GROUPS.map(g => `
         <div class="meal-head"><b>${g.label}</b><span></span></div>
         ${g.items.map(k => {
@@ -290,16 +338,13 @@ App.Workout = (function () {
             <div style="color:var(--accent);font-size:22px">${k === cur ? '✓' : '→'}</div>
           </div>`;
         }).join('')}`).join('')}
-      <button class="btn ghost" id="sw-reset" style="margin-top:10px">Use the scheduled workout</button>
+      <button class="btn ghost" id="sw-reset" style="margin-top:10px">Use the scheduled / next workout</button>
     `, (m, close) => {
-      m.querySelectorAll('[data-day]').forEach(el => el.onclick = () => {
-        Store.setDayChoice(current.dateKey, el.dataset.day);
-        close(); render(container, current.dateKey); UI.toast('Workout switched', 'good');
-      });
-      m.querySelector('#sw-reset').onclick = () => {
-        Store.clearDayChoice(current.dateKey);
-        close(); render(container, current.dateKey); UI.toast('Back to scheduled');
-      };
+      const choose = (type, deload) => { Store.setDayChoice(current.dateKey, type, deload); close(); render(container, current.dateKey); UI.toast(deload ? 'Deload day set' : 'Workout set', 'good'); };
+      m.querySelectorAll('[data-day]').forEach(el => el.onclick = () => choose(el.dataset.day, false));
+      m.querySelectorAll('[data-sore]').forEach(el => el.onclick = () => choose(complementFor(el.dataset.sore), false));
+      m.querySelector('[data-adapt="deload"]').onclick = () => choose(next, true);
+      m.querySelector('#sw-reset').onclick = () => { Store.clearDayChoice(current.dateKey); close(); render(container, current.dateKey); UI.toast('Reset'); };
     });
   }
 
