@@ -47,7 +47,7 @@ window.App = window.App || {};
     const pl = App.Goals.plan();
     const target = Store.daysUntilTarget();
     const t = Store.dayTotals();
-    const remaining = Math.max(0, p.cal - t.cal);
+    const remaining = Math.max(0, p.cal + Store.exerciseCals() - t.cal);
     const cur = Store.latestWeight();
     const toGoal = (p.targetWeight || cur) - cur;
 
@@ -116,6 +116,7 @@ window.App = window.App || {};
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Goal paths (pick any mix)</label>
       ${G.goalChips(goals)}
+      ${UI.field('Diet phase', G.phaseSelect(p.dietPhase))}
 
       <div class="divider"></div>
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Your stats</label>
@@ -201,6 +202,7 @@ window.App = window.App || {};
         sex: m.querySelector('#g-sex').value, age:+m.querySelector('#s-age').value || p.age,
         heightIn:+m.querySelector('#s-h').value || p.heightIn, activity:m.querySelector('#g-act').value,
         split:m.querySelector('#g-split').value, daysPerWeek:+m.querySelector('#g-days').value || 0,
+        dietPhase:m.querySelector('#g-phase').value,
         targetDate:m.querySelector('#s-target').value, goals, startWeight:+m.querySelector('#s-sw').value || Store.latestWeight(),
       });
       const drawPlan = () => {
@@ -209,7 +211,7 @@ window.App = window.App || {};
         m.querySelector('#s-guide').innerHTML = App.Goals.guideCard(pl);
       };
       m.querySelector('#s-recalc').onclick = drawPlan;
-      m.querySelectorAll('[data-goal], #g-sex, #s-age, #s-h, #s-sw, #g-act, #g-split, #g-days, #s-target').forEach(el => el.addEventListener('change', drawPlan));
+      m.querySelectorAll('[data-goal], #g-sex, #s-age, #s-h, #s-sw, #g-act, #g-split, #g-days, #g-phase, #s-target').forEach(el => el.addEventListener('change', drawPlan));
       drawPlan();
 
       m.querySelector('#s-export').onclick = exportBackup;
@@ -227,6 +229,7 @@ window.App = window.App || {};
           activity: m.querySelector('#g-act').value,
           split: m.querySelector('#g-split').value,
           daysPerWeek: +m.querySelector('#g-days').value || 0,
+          dietPhase: m.querySelector('#g-phase').value,
           scheduleMode: flex.classList.contains('on') ? 'flexible' : 'fixed',
           restTimerOn: rt.classList.contains('on'),
           restTimer: +m.querySelector('#s-rtsec').value || 120,
@@ -326,8 +329,9 @@ window.App = window.App || {};
 
       <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 8px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Goal paths (pick one or more)</label>
       ${G.goalChips(goals)}
+      ${UI.field('Diet phase', G.phaseSelect('auto'))}
 
-      ${UI.field('Name', `<input class="input" id="o-name" placeholder="First name" style="margin-top:14px">`)}
+      ${UI.field('Name', `<input class="input" id="o-name" placeholder="First name">`)}
       <div class="inline-fields" style="margin-bottom:14px">
         <div class="field" style="margin:0"><label>Sex</label>${G.sexSelect('male')}</div>
         <div class="field" style="margin:0"><label>Age</label><input class="input" id="o-age" type="number" placeholder="25"></div>
@@ -352,11 +356,12 @@ window.App = window.App || {};
         sex:m.querySelector('#g-sex').value, age:+m.querySelector('#o-age').value || 25,
         heightIn:+m.querySelector('#o-h').value || 70, activity:m.querySelector('#g-act').value,
         split:m.querySelector('#g-split').value, daysPerWeek:+m.querySelector('#g-days').value || 0,
+        dietPhase:m.querySelector('#g-phase').value,
         targetDate:m.querySelector('#o-target').value, goals,
       });
       const w = () => +m.querySelector('#o-sw').value || 160;
       const draw = () => { m.querySelector('#o-plan').innerHTML = App.Goals.planSummary(App.Goals.plan(readP(), w())); };
-      m.querySelectorAll('[data-goal], #g-sex, #o-age, #o-h, #o-sw, #g-act, #g-split, #g-days, #o-target').forEach(el => el.addEventListener('change', draw));
+      m.querySelectorAll('[data-goal], #g-sex, #o-age, #o-h, #o-sw, #g-act, #g-split, #g-days, #g-phase, #o-target').forEach(el => el.addEventListener('change', draw));
       draw();
 
       m.querySelector('#o-start').onclick = async () => {
@@ -366,6 +371,7 @@ window.App = window.App || {};
           goals, sex:m.querySelector('#g-sex').value, age:+m.querySelector('#o-age').value || 25,
           heightIn:+m.querySelector('#o-h').value || 70, activity:m.querySelector('#g-act').value,
           split:m.querySelector('#g-split').value, daysPerWeek:+m.querySelector('#g-days').value || 0,
+          dietPhase:m.querySelector('#g-phase').value,
           startWeight: weight, targetDate: m.querySelector('#o-target').value || '',
           startDate: Store.todayKey(), customMacros:false,
         });
@@ -390,11 +396,14 @@ window.App = window.App || {};
 
   // expose for other modules
   App.openSettings = settings;
-  App.afterProfileChange = () => {
+  // Enter the app for the active profile (also hides the launch selector).
+  App.enterApp = () => {
+    const l = document.getElementById('launch'); if (l) l.classList.add('hidden');
     setProfileInitial();
     App.Reminders.start();
     Router.go('today');
   };
+  App.afterProfileChange = () => App.enterApp();
 
   /* ---------- boot ---------- */
   function boot() {
@@ -410,9 +419,11 @@ window.App = window.App || {};
 
     Store.requestPersist();   // ask iOS/Safari to keep our data durable
     Router.go('today');
-    App.Reminders.start();
 
-    if (!Store.get().onboarded) onboard();
+    // Entry: fresh → onboarding; otherwise → "Who's training?" profile picker
+    const anyOnboarded = Store.allProfilesData().some(p => p.state.onboarded);
+    if (!anyOnboarded) { App.Reminders.start(); onboard(); }
+    else { App.Profiles.launchSelector(); }
 
     // service worker (offline + installable)
     if ('serviceWorker' in navigator) {

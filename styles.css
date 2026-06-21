@@ -245,6 +245,20 @@ a{color:var(--accent-3)}
 .bc-line{position:absolute;left:0;right:0;height:2px;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:bcScan 1.8s ease-in-out infinite}
 @keyframes bcScan{0%{top:4%}50%{top:94%}100%{top:4%}}
 
+/* ---------- Launch profile selector ---------- */
+.launch{position:fixed;inset:0;z-index:90;background:radial-gradient(120% 90% at 50% 0%,rgba(198,255,58,.1),transparent 60%),var(--bg);display:flex;align-items:center;justify-content:center;padding:24px;padding-top:calc(var(--safe-t) + 24px)}
+.launch.hidden{display:none}
+.launch-inner{width:100%;max-width:480px;text-align:center}
+.launch-logo{width:54px;height:54px;border-radius:15px;margin:0 auto 18px;display:grid;place-items:center;font-weight:800;font-size:28px;color:#0c0d10;background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+.launch-inner h1{font-size:26px;margin:0 0 26px;letter-spacing:-.5px}
+.launch-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.launch-card{display:flex;flex-direction:column;align-items:center;gap:7px;padding:20px 12px;border-radius:18px;background:var(--card);border:1px solid var(--line)}
+.launch-card:active{transform:scale(.97);border-color:var(--accent)}
+.launch-card b{font-size:15px}
+.launch-card small{color:var(--muted);font-size:12px}
+.launch-av{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-size:32px}
+.launch-av.add{background:var(--card-2);color:var(--accent);border:2px dashed var(--line);font-size:30px}
+
 /* ---------- Rest timer ---------- */
 .rest-timer{position:fixed;left:12px;right:12px;bottom:calc(var(--tab-h) + var(--safe-b) + 12px);z-index:70;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:16px;background:linear-gradient(135deg,#1c1f28,#16181f);border:1px solid var(--accent);box-shadow:var(--shadow);max-width:660px;margin:0 auto}
 .rest-timer .rt-mid{flex:1;text-align:center;display:flex;flex-direction:column;line-height:1}

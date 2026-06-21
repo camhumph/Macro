@@ -71,7 +71,8 @@ App.Workout = (function () {
     const choice = Store.getDayChoice(dateKey);   // manual override / adapt for this day
 
     let dayType, deload = false;
-    if (choice && DATA.DAYS[choice.type]) {
+    const isChoice = choice && (DATA.DAYS[choice.type] || (choice.type || '').startsWith('rt_'));
+    if (isChoice) {
       dayType = choice.type; deload = choice.deload;
     } else if (mode === 'flexible') {
       // Adaptive: show the next workout in the rotation. Missing a day never
@@ -80,20 +81,29 @@ App.Workout = (function () {
     } else {
       dayType = DATA.buildSchedule(pl.split, pl.days, pl.cardio)[dow];
     }
-    const day = DATA.DAYS[dayType] || DATA.DAYS.rest;
+
+    // resolve routine vs built-in day
+    let routine = null, dayName, baseDefs;
+    if ((dayType || '').startsWith('rt_')) {
+      routine = Store.getRoutine(dayType);
+      if (!routine) { dayType = 'rest'; }
+      else { dayName = routine.name; baseDefs = routine.exercises.map(resolveDef).filter(Boolean); }
+    }
+    const day = routine ? null : (DATA.DAYS[dayType] || DATA.DAYS.rest);
+    if (!routine) { dayName = day.name; baseDefs = day.exercises; }
 
     if (existing && existing.dayType === dayType) return existing;
 
     const ov = Store.getProgramOverride(dayType);
-    const defs = ov ? ov.map(resolveDef).filter(Boolean) : day.exercises;
+    const defs = ov ? ov.map(resolveDef).filter(Boolean) : baseDefs;
     let exercises = defs.map(ex => makeInstance(ex, bias));
-    if (!ov) exercises = arrange(exercises);   // MJ-first + supersets for default templates
+    if (!ov && !routine) exercises = arrange(exercises);   // MJ-first + supersets for default templates
     if (deload) exercises.forEach(ex => {
       if (ex.type === 'cond') return;
       if (ex.sets.length > 2) ex.sets.pop();   // trim a set
       ex.rir = '3–4 RIR · deload';
     });
-    return { dateKey, week, bias, planTitle: pl.title, dayType, dayName: day.name, exercises, customized: !!ov, switched: !!choice, deload };
+    return { dateKey, week, bias, planTitle: pl.title, dayType, dayName, exercises, customized: !!ov, switched: !!choice, deload, isRoutine: !!routine };
   }
 
   function persist() { if (current) Store.saveWorkout(current.dateKey, current); }
@@ -129,7 +139,8 @@ App.Workout = (function () {
           <button class="btn small ghost" id="wk-${editMode ? 'info' : 'edit'}">${editMode ? 'Notes ▸' : '✏️ Edit'}</button>
         </div>
       </div>
-      <h2 style="margin:4px 2px 14px;font-size:21px;letter-spacing:-.4px">${UI.esc(current.dayName)}</h2>
+      <h2 style="margin:4px 2px 10px;font-size:21px;letter-spacing:-.4px">${UI.esc(current.dayName)}</h2>
+      ${editMode ? '' : '<button class="btn ghost small" id="wk-plates" style="margin-bottom:12px">🏋️ Plate calculator</button>'}
     `;
 
     if (editMode) html += recoBanner();
@@ -301,6 +312,11 @@ App.Workout = (function () {
     if (info) info.addEventListener('click', coachSheet);
     const sw = container.querySelector('#wk-switch');
     if (sw) sw.addEventListener('click', () => switchSheet(container));
+    const plates = container.querySelector('#wk-plates');
+    if (plates) plates.addEventListener('click', () => {
+      const firstMain = current.exercises.find(e => e.type === 'main');
+      plateSheet(firstMain && firstMain.suggest ? firstMain.suggest : 135);
+    });
   }
 
   /* ---------- choose / switch today's workout ---------- */
@@ -346,6 +362,13 @@ App.Workout = (function () {
       <div class="search-result" data-day="conditioning"><div class="sr-main"><b>Active recovery</b><small>Easy cardio / conditioning instead</small></div><div style="font-size:20px">🏃</div></div>
       <div class="search-result" data-day="rest"><div class="sr-main"><b>Take a rest day</b><small>Full recovery</small></div><div style="font-size:20px">🛌</div></div>
 
+      ${Store.routines().length ? `<div class="meal-head"><b>My Routines</b><span></span></div>
+        ${Store.routines().map(r => `<div class="search-result ${r.id === cur ? 'me' : ''}" data-day="${r.id}">
+          <div class="sr-main"><b>${UI.esc(r.name)}</b><small>${r.exercises.length} exercises · your routine</small></div>
+          <button class="icon-btn" data-rtdel="${r.id}" style="width:30px;height:30px;color:var(--faint);font-size:18px">×</button>
+        </div>`).join('')}` : ''}
+      <button class="btn ghost" id="sw-newroutine" style="margin-top:8px">＋ Create a routine</button>
+
       ${SWITCH_GROUPS.map(g => `
         <div class="meal-head"><b>${g.label}</b><span></span></div>
         ${g.items.map(k => {
@@ -360,9 +383,11 @@ App.Workout = (function () {
       <button class="btn ghost" id="sw-reset" style="margin-top:10px">Use the scheduled / next workout</button>
     `, (m, close) => {
       const choose = (type, deload) => { Store.setDayChoice(current.dateKey, type, deload); close(); render(container, current.dateKey); UI.toast(deload ? 'Deload day set' : 'Workout set', 'good'); };
-      m.querySelectorAll('[data-day]').forEach(el => el.onclick = () => choose(el.dataset.day, false));
+      m.querySelectorAll('[data-day]').forEach(el => el.onclick = (e) => { if (e.target.closest('[data-rtdel]')) return; choose(el.dataset.day, false); });
       m.querySelectorAll('[data-sore]').forEach(el => el.onclick = () => choose(complementFor(el.dataset.sore), false));
+      m.querySelectorAll('[data-rtdel]').forEach(b => b.onclick = (e) => { e.stopPropagation(); Store.removeRoutine(b.dataset.rtdel); close(); switchSheet(container); });
       m.querySelector('[data-adapt="deload"]').onclick = () => choose(next, true);
+      m.querySelector('#sw-newroutine').onclick = () => { close(); routineBuilder(container); };
       m.querySelector('#sw-reset').onclick = () => { Store.clearDayChoice(current.dateKey); close(); render(container, current.dateKey); UI.toast('Reset'); };
     });
   }
@@ -426,7 +451,8 @@ App.Workout = (function () {
   const CAT_EMOJI = { Chest:'🏋️', Back:'🪢', Shoulders:'🤸', Arms:'💪', Legs:'🦵', Core:'🔥', Power:'⚡', Cardio:'🏃', Other:'🏋️' };
   function typeLabel(t) { return t === 'main' ? 'Main' : t === 'abs' ? 'Core' : t === 'plyo' ? 'Power' : t === 'cond' ? 'Cardio' : 'Accessory'; }
 
-  function picker(mode, idx, c) {
+  // Generic exercise picker → calls onPick(def). Reused by edit, routines.
+  function libraryPicker(title, onPick) {
     const groups = DATA.exLibrary();
     const list = groups.map(g => `
       <div class="meal-head"><b>${g.cat}</b><span></span></div>
@@ -437,18 +463,14 @@ App.Workout = (function () {
           <div style="color:var(--accent);font-size:22px">＋</div>
         </div>`).join('')}
     `).join('');
-
     UI.modal(`
-      <h2>${mode === 'swap' ? 'Swap exercise' : 'Add exercise'}</h2>
+      <h2>${title}</h2>
       <input class="input" id="lib-q" placeholder="Search exercises…" autocomplete="off">
       <button class="btn ghost small" id="lib-custom" style="margin-top:10px;width:100%">✏️ Add a custom exercise</button>
       <div id="lib-list" style="margin-top:12px">${list}</div>
     `, (m, close) => {
-      m.querySelectorAll('[data-key]').forEach(el => el.onclick = () => {
-        const def = DATA.ALL[el.dataset.key]; close();
-        mode === 'swap' ? swapExercise(idx, def, c) : addExerciseByDef(def, c);
-      });
-      m.querySelector('#lib-custom').onclick = () => { close(); customExercise(mode, idx, c); };
+      m.querySelectorAll('[data-key]').forEach(el => el.onclick = () => { const def = DATA.ALL[el.dataset.key]; close(); onPick(def); });
+      m.querySelector('#lib-custom').onclick = () => { close(); customExercise(onPick); };
       m.querySelector('#lib-q').addEventListener('input', e => {
         const t = e.target.value.toLowerCase();
         m.querySelectorAll('#lib-list .search-result').forEach(el => el.style.display = el.textContent.toLowerCase().includes(t) ? '' : 'none');
@@ -456,8 +478,10 @@ App.Workout = (function () {
       });
     });
   }
-
-  function customExercise(mode, idx, c) {
+  function picker(mode, idx, c) {
+    libraryPicker(mode === 'swap' ? 'Swap exercise' : 'Add exercise', def => mode === 'swap' ? swapExercise(idx, def, c) : addExerciseByDef(def, c));
+  }
+  function customExercise(onPick) {
     UI.modal(`
       <h2>Custom exercise</h2>
       ${UI.field('Name', `<input class="input" id="cx-name" placeholder="e.g. Landmine Press">`)}
@@ -467,16 +491,80 @@ App.Workout = (function () {
         <option value="abs">Core / abs</option>
         <option value="cond">Cardio / conditioning</option>
       </select>`)}
-      <button class="btn primary" id="cx-go">${mode === 'swap' ? 'Swap in' : 'Add'}</button>
+      <button class="btn primary" id="cx-go">Add</button>
     `, (m, close) => {
       m.querySelector('#cx-go').onclick = () => {
         const name = m.querySelector('#cx-name').value.trim();
         if (!name) return UI.toast('Name it first');
         const type = m.querySelector('#cx-type').value;
-        const def = { key: 'custom_' + Date.now(), name, type, sets: type === 'cond' ? 1 : 3, reps: type === 'cond' ? '20–30 min' : undefined };
         close();
-        mode === 'swap' ? swapExercise(idx, def, c) : addExerciseByDef(def, c);
+        onPick({ key: 'custom_' + Date.now(), name, type, sets: type === 'cond' ? 1 : 3, reps: type === 'cond' ? '20–30 min' : undefined });
       };
+    });
+  }
+
+  /* ---------- routine builder (reusable user templates) ---------- */
+  function routineBuilder(container, existing) {
+    const draft = existing ? existing.exercises.map(e => ({ ...e })) : [];
+    let name = existing ? existing.name : '';
+    const open = () => {
+      UI.modal(`
+        <h2>${existing ? 'Edit' : 'New'} routine</h2>
+        ${UI.field('Name', `<input class="input" id="rt-name" placeholder="e.g. My Push Day" value="${UI.esc(name)}">`)}
+        <div id="rt-list">${draft.length ? draft.map((e, i) => {
+          const def = DATA.ALL[e.key] || e.custom || {};
+          return `<div class="search-result"><div class="sr-main"><b>${UI.esc((def.name) || e.key)}</b><small>${e.sets || 3} sets</small></div><button class="icon-btn" data-rtrm="${i}" style="width:30px;height:30px;color:var(--bad)">×</button></div>`;
+        }).join('') : '<p class="muted" style="text-align:center;padding:14px">No exercises yet.</p>'}</div>
+        <button class="btn" id="rt-add" style="margin-top:8px">＋ Add exercise</button>
+        <button class="btn primary" id="rt-save" style="margin-top:12px">Save routine</button>
+      `, (m, close) => {
+        m.querySelector('#rt-name').addEventListener('input', e => name = e.target.value);
+        m.querySelectorAll('[data-rtrm]').forEach(b => b.onclick = () => { draft.splice(+b.dataset.rtrm, 1); close(); open(); });
+        m.querySelector('#rt-add').onclick = () => { name = m.querySelector('#rt-name').value; close(); libraryPicker('Add to routine', def => { draft.push(def.key && DATA.ALL[def.key] ? { key: def.key, sets: def.sets || 3 } : { key: def.key, custom: { name: def.name, type: def.type, reps: def.reps }, sets: def.sets || 3 }); open(); }); };
+        m.querySelector('#rt-save').onclick = () => {
+          name = m.querySelector('#rt-name').value.trim();
+          if (!name) return UI.toast('Name it first');
+          if (!draft.length) return UI.toast('Add at least one exercise');
+          if (existing) { existing.name = name; existing.exercises = draft; Store.save(); }
+          else Store.addRoutine(name, draft);
+          close(); UI.toast('Routine saved', 'good');
+          if (container) switchSheet(container);
+        };
+      });
+    };
+    open();
+  }
+
+  /* ---------- plate calculator ---------- */
+  const PLATES = [45, 35, 25, 10, 5, 2.5];
+  function plateSheet(startWeight) {
+    UI.modal(`
+      <h2>Plate calculator</h2>
+      <div class="inline-fields" style="margin-bottom:14px">
+        <div class="field" style="margin:0"><label>Target weight</label><input class="input" id="pc-w" type="number" inputmode="decimal" value="${startWeight || 135}"></div>
+        <div class="field" style="margin:0"><label>Bar</label><select class="input" id="pc-bar"><option value="45">45 lb</option><option value="35">35 lb</option><option value="15">15 lb</option><option value="0">none</option></select></div>
+      </div>
+      <div class="card" id="pc-out"></div>
+    `, (m) => {
+      const calc = () => {
+        const target = +m.querySelector('#pc-w').value || 0;
+        const bar = +m.querySelector('#pc-bar').value;
+        let perSide = (target - bar) / 2;
+        if (perSide < 0) { m.querySelector('#pc-out').innerHTML = `<span class="muted">Target is below the bar weight.</span>`; return; }
+        const used = []; let rem = perSide;
+        PLATES.forEach(pl => { while (rem >= pl - 1e-9) { used.push(pl); rem = +(rem - pl).toFixed(2); } });
+        const counts = {};
+        used.forEach(p => counts[p] = (counts[p] || 0) + 1);
+        m.querySelector('#pc-out').innerHTML = `
+          <div class="spread"><b>Per side</b><span class="muted">${perSide} lb</span></div>
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+            ${used.length ? Object.keys(counts).map(p => `<span class="pill accent">${counts[p]} × ${p}</span>`).join('') : '<span class="muted">Just the bar</span>'}
+          </div>
+          ${rem > 0 ? `<div class="last-hint">${rem} lb/side not reachable with standard plates</div>` : ''}`;
+      };
+      m.querySelector('#pc-w').addEventListener('input', calc);
+      m.querySelector('#pc-bar').addEventListener('change', calc);
+      calc();
     });
   }
 

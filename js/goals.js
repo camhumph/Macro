@@ -82,10 +82,23 @@ App.Goals = (function () {
   }
 
   /* ---------- the plan ---------- */
+  // Diet phase can override the goal-derived calorie direction.
+  const PHASE = {
+    bulk:     { calAdj: 0.12,  dir: 1,  rate: 0.004, name: 'Bulk' },
+    cut:      { calAdj: -0.20, dir: -1, rate: 0.0065, proteinPerLb: 1.1, name: 'Cut' },
+    maintain: { calAdj: 0,     dir: 0,  rate: 0,     name: 'Maintain' },
+  };
+
   function plan(profile, weight) {
     profile = profile || Store.profile();
     weight = weight || Store.latestWeight();
     const c = combine(profile.goals);
+    // apply diet phase override (cut / bulk / maintain) on top of training goals
+    const ph = profile.dietPhase && PHASE[profile.dietPhase] ? PHASE[profile.dietPhase] : null;
+    if (ph) {
+      c.calAdj = ph.calAdj; c.dir = ph.dir; c.rate = ph.rate;
+      if (ph.proteinPerLb) c.proteinPerLb = Math.max(c.proteinPerLb, ph.proteinPerLb);
+    }
     const tdeeVal = tdee(profile, weight);
     const cal = Math.max(1200, Math.round(tdeeVal * (1 + c.calAdj) / 10) * 10);
     const protein = Math.round(c.proteinPerLb * weight);
@@ -100,8 +113,14 @@ App.Goals = (function () {
       tdee: Math.round(tdeeVal), cal, protein, carbs, fat,
       dir: c.dir, weeklyRate, targetWeight, horizon, bias: c.bias, cardio: c.cardio,
       split, days, splitName: App.DATA.SPLITS[split].name,
+      phase: ph ? ph.name : 'Auto',
       keys: c.keys, title: titleFor(c.keys), guide: guideFor(c, weeklyRate),
     };
+  }
+
+  function phaseSelect(v) {
+    const opts = [['auto','Auto (from goals)'],['bulk','Bulk (surplus)'],['maintain','Maintain'],['cut','Cut (deficit)']];
+    return `<select class="input" id="g-phase">${opts.map(([k,l]) => `<option value="${k}" ${k===(v||'auto')?'selected':''}>${l}</option>`).join('')}</select>`;
   }
 
   function titleFor(keys) {
@@ -172,6 +191,7 @@ App.Goals = (function () {
     return `
       <div class="card">
         <div class="spread"><b>${UI.esc(pl.title)}</b><span class="pill accent">${pl.cal} cal/day</span></div>
+        <div style="margin-top:6px"><span class="pill ${pl.dir<0?'orange':''}">${pl.dir>0?'🔼 Bulk':pl.dir<0?'🔽 Cut':'➖ Maintain'}${pl.phase!=='Auto'?' · '+pl.phase:''}</span></div>
         <div class="macro-row" style="margin-top:12px">
           ${macroPill('Protein', pl.protein)}${macroPill('Carbs', pl.carbs)}${macroPill('Fat', pl.fat)}
         </div>
@@ -205,5 +225,5 @@ App.Goals = (function () {
   }
 
   return { GOALS, GOAL_ORDER, ACTIVITY, tdee, plan, recompute, biasLabel,
-           goalChips, wireGoalChips, sexSelect, activitySelect, splitSelect, daysSelect, planSummary, guideCard };
+           goalChips, wireGoalChips, sexSelect, activitySelect, splitSelect, daysSelect, phaseSelect, planSummary, guideCard };
 })();

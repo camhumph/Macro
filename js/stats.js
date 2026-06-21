@@ -82,6 +82,7 @@ App.Stats = (function () {
             <div class="bar-track"><div class="bar-fill" style="width:${UI.clamp(rk.idx/5*100,4,100)}%;background:var(--accent)"></div></div>
             ${rk.nextRatio ? `<div class="last-hint">${UI.round(rk.nextRatio*(Store.latestWeight()||1))} lb 1RM for ${RANKS[rk.idx+1]}</div>` : `<div class="last-hint suggest">Elite — top tier 💪</div>`}
           </div>` : ''}
+          ${sparkline(l.key)}
           <div class="grid-2" style="margin-top:12px">
             ${repTile('5 reps', l.e5)}${repTile('8 reps', l.e8)}
             ${repTile('10 reps', l.e10)}${repTile('12 reps', l.e12)}
@@ -90,6 +91,31 @@ App.Stats = (function () {
         </div>`;
       }).join('')}
     `;
+  }
+
+  // Estimated-1RM over time for a lift (best per day) → mini sparkline.
+  function liftSeries(key) {
+    const byDate = {};
+    Store.exerciseHistory(key).forEach(h => {
+      const e = h.weight * (1 + Math.min(h.reps, 12) / 30);
+      if (!byDate[h.date] || e > byDate[h.date]) byDate[h.date] = e;
+    });
+    return Object.keys(byDate).sort().map(d => ({ date: d, e: byDate[d] }));
+  }
+  function sparkline(key) {
+    const s = liftSeries(key);
+    if (s.length < 2) return '';
+    const W = 300, H = 46, pad = 4;
+    const ys = s.map(p => p.e), min = Math.min(...ys), max = Math.max(...ys);
+    const span = (max - min) || 1;
+    const x = i => pad + i / (s.length - 1) * (W - 2 * pad);
+    const y = v => H - pad - (v - min) / span * (H - 2 * pad);
+    const path = s.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.e).toFixed(1)}`).join(' ');
+    const up = ys[ys.length - 1] >= ys[0];
+    return `<div style="margin-top:12px">
+      <div class="spread"><span class="muted" style="font-size:12px">Est. 1RM trend</span><span class="${up?'delta-up':'delta-bad'}" style="font-size:12px">${up?'▲':'▼'} ${UI.round(ys[0])}→${UI.round(ys[ys.length-1])} lb</span></div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:46px;margin-top:4px"><path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </div>`;
   }
 
   /* ---------- History: past sessions ---------- */

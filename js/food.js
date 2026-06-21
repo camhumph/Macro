@@ -16,7 +16,9 @@ App.Food = (function () {
   function page(container) {
     const p = Store.profile();
     const t = Store.dayTotals();
-    const remaining = Math.max(0, p.cal - t.cal);
+    const burned = Store.exerciseCals();           // calories logged as exercise
+    const budget = p.cal + burned;                  // MFP: goal + exercise
+    const remaining = Math.max(0, budget - t.cal);
     const log = Store.foodLog();
 
     // pace hint: how much more to eat, framed by time of day and goal
@@ -28,15 +30,15 @@ App.Food = (function () {
       pace = `<b>${UI.round(remaining)} cal</b> left today${protLeft > 0 ? ` · ${UI.round(protLeft)}g protein to go` : ''}.`;
       if (hour >= 19 && remaining > 600 && dir >= 0) pace = `<b>${UI.round(remaining)} cal short</b> with the day winding down — a shake or another protein-and-carb meal closes the gap.`;
     } else {
-      const over = UI.round(t.cal - p.cal);
-      pace = dir < 0 ? `Over target by <b>${over} cal</b> — tighten portions to stay in your deficit.` : `Target reached — <b>${over} cal</b> over.`;
+      const over = UI.round(t.cal - budget);
+      pace = dir < 0 ? `Over budget by <b>${over} cal</b> — tighten portions to stay in your deficit.` : `Target reached — <b>${over} cal</b> over.`;
     }
 
     let html = `
       <div class="hero">
-        <div class="eyebrow">Today's nutrition</div>
+        <div class="eyebrow">Today's nutrition${burned ? ` · +${UI.round(burned)} from exercise` : ''}</div>
         <div class="ring-wrap" style="margin-top:14px">
-          ${UI.ring(t.cal, p.cal, UI.round(remaining), 'cal left', 'var(--accent)')}
+          ${UI.ring(t.cal, budget, UI.round(remaining), 'cal left', 'var(--accent)')}
           <div class="macro-bars">
             ${UI.macroBar('Protein', t.protein, p.protein, 'var(--protein)')}
             ${UI.macroBar('Carbs', t.carbs, p.carbs, 'var(--carbs)')}
@@ -55,6 +57,9 @@ App.Food = (function () {
         <button class="btn" id="food-photo">📷 Photo</button>
       </div>
     `;
+
+    // Exercise calories (added back to budget)
+    html += exerciseCard();
 
     // Water tracker
     html += waterCard();
@@ -89,6 +94,10 @@ App.Food = (function () {
     container.querySelector('#food-barcode').onclick = () => App.Barcode.scan();
     container.querySelector('#food-scan').onclick = () => App.Scan.scanLabel();
     container.querySelector('#food-photo').onclick = () => photoSheet();
+    // exercise calories
+    const exAdd = container.querySelector('#ex-add');
+    if (exAdd) exAdd.onclick = () => exerciseSheet(container);
+    container.querySelectorAll('[data-xdel]').forEach(b => b.onclick = () => { Store.removeExerciseCal(b.dataset.xdel); page(container); });
     // water
     container.querySelectorAll('[data-water]').forEach(b => b.onclick = () => { Store.addWater(+b.dataset.water); page(container); });
     // meals
@@ -102,6 +111,43 @@ App.Food = (function () {
       Store.removeFood(b.dataset.del);
       page(container);
       UI.toast('Removed');
+    });
+  }
+
+  /* ---------- exercise / cardio calories ---------- */
+  const CARDIO_PRESETS = [['🏃 Run 30m',300],['🚴 Bike 30m',250],['🚶 Walk 45m',180],['🏊 Swim 30m',300],['🧗 StairMaster 20m',220]];
+  function exerciseCard() {
+    const entries = Store.exerciseLog();
+    const total = entries.reduce((s,e)=>s+(e.cal||0),0);
+    return `
+    <div class="card" style="margin-top:14px">
+      <div class="spread" style="margin-bottom:10px"><b>🔥 Exercise</b><span class="muted">${total ? '+'+UI.round(total)+' cal' : 'none logged'}</span></div>
+      ${entries.map(e=>`<div class="food-item" style="padding:8px 0"><div class="fi-main"><b>${UI.esc(e.name)}</b></div><div class="fi-cal">${UI.round(e.cal)}<small>cal</small></div><button class="icon-btn" data-xdel="${e.id}" style="width:28px;height:28px;color:var(--faint);font-size:18px">×</button></div>`).join('')}
+      <button class="btn small" id="ex-add" style="width:100%;margin-top:8px">＋ Log exercise calories</button>
+    </div>`;
+  }
+  function exerciseSheet(container) {
+    UI.modal(`
+      <h2>Log exercise</h2>
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Calories you burn get added back to today's budget.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+        ${CARDIO_PRESETS.map((c,i)=>`<button class="btn small" data-preset="${i}">${c[0]} · ${c[1]}</button>`).join('')}
+      </div>
+      ${UI.field('Activity', `<input class="input" id="ex-name" placeholder="e.g. Run">`)}
+      ${UI.field('Calories burned', `<input class="input" id="ex-cal" type="number" inputmode="numeric" placeholder="0">`)}
+      <button class="btn primary" id="ex-go">Add</button>
+    `, (m) => {
+      m.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => {
+        const c = CARDIO_PRESETS[+b.dataset.preset];
+        m.querySelector('#ex-name').value = c[0].replace(/^\S+\s/,''); m.querySelector('#ex-cal').value = c[1];
+      });
+      m.querySelector('#ex-go').onclick = () => {
+        const name = m.querySelector('#ex-name').value.trim() || 'Exercise';
+        const cal = +m.querySelector('#ex-cal').value || 0;
+        if (cal <= 0) return UI.toast('Enter calories');
+        Store.addExerciseCal(name, cal);
+        UI.closeModal(); page(container); UI.toast('Exercise logged', 'good');
+      };
     });
   }
 

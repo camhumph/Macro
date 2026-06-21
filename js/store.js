@@ -26,6 +26,7 @@ App.Store = (function () {
         sex:'male', age:25, heightIn:70, startWeight:160,
         activity:'moderate',
         goals:['physique'],     // selected goal paths
+        dietPhase:'auto',       // 'auto' | 'bulk' | 'cut' | 'maintain'
         split:'auto',           // 'auto' | 'fullbody' | 'upperlower' | 'ppl'
         daysPerWeek:0,          // 0 = derive from split
         scheduleMode:'flexible',// 'flexible' (next-in-rotation, adapts) | 'fixed' (weekday-based)
@@ -46,6 +47,8 @@ App.Store = (function () {
       foodLogs:{},     // dateKey -> [ entries ]
       water:{},        // dateKey -> cups
       meals:[],        // saved meals: [ { id, name, items:[entry], emoji } ]
+      exerciseLogs:{}, // dateKey -> [ { id, name, cal } ] calories burned
+      routines:[],     // user-built routines: [ { id, name, exercises:[{key,sets,custom?}] } ]
       weightLogs:[],   // [ { date, weight } ] sorted by date
       pantry:[],       // scanned/saved foods you draw portions from
       programOverrides:{}, // dayType -> [ {key, sets, custom?} ] custom routine
@@ -222,6 +225,30 @@ App.Store = (function () {
     return state.water[dateKey];
   }
 
+  /* ---------- exercise / cardio calories burned ---------- */
+  function exerciseLog(dateKey) { return state.exerciseLogs[dateKey || todayKey()] || []; }
+  function exerciseCals(dateKey) { return exerciseLog(dateKey).reduce((s, e) => s + (e.cal || 0), 0); }
+  function addExerciseCal(name, cal, dateKey) {
+    dateKey = dateKey || todayKey();
+    if (!state.exerciseLogs[dateKey]) state.exerciseLogs[dateKey] = [];
+    state.exerciseLogs[dateKey].push({ id: 'x' + Date.now(), name, cal });
+    save();
+  }
+  function removeExerciseCal(id, dateKey) {
+    dateKey = dateKey || todayKey();
+    state.exerciseLogs[dateKey] = (state.exerciseLogs[dateKey] || []).filter(e => e.id !== id);
+    save();
+  }
+
+  /* ---------- user-built routines ---------- */
+  function routines() { return state.routines; }
+  function getRoutine(id) { return state.routines.find(r => r.id === id) || null; }
+  function addRoutine(name, exercises) {
+    const r = { id: 'rt_' + Date.now(), name, exercises };
+    state.routines.push(r); save(); return r;
+  }
+  function removeRoutine(id) { state.routines = state.routines.filter(r => r.id !== id); save(); }
+
   /* ---------- saved meals (combos of foods) ---------- */
   function meals() { return state.meals; }
   function addMeal(name, items, emoji) {
@@ -341,6 +368,8 @@ App.Store = (function () {
     logWeight, weightToday, latestWeight,
     foodLog, addFood, updateFood, removeFood, dayTotals,
     water, addWater, meals, addMeal, removeMeal, allWorkoutLogs,
+    exerciseLog, exerciseCals, addExerciseCal, removeExerciseCal,
+    routines, getRoutine, addRoutine, removeRoutine,
     pantry, addPantry, updatePantry, removePantry,
     getProgramOverride, setProgramOverride, clearProgramOverride,
     getDayChoice, setDayChoice, clearDayChoice, trainingDates,

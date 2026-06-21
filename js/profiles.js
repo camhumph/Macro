@@ -6,6 +6,28 @@ window.App = window.App || {};
 App.Profiles = (function () {
   const Store = App.Store, UI = App.UI, LB = App.Leaderboard;
 
+  /* ---------- launch profile selector ("Who's training?") ---------- */
+  function launchSelector() {
+    const data = Store.allProfilesData();
+    let host = document.getElementById('launch');
+    if (!host) { host = document.createElement('div'); host.id = 'launch'; host.className = 'launch'; document.body.appendChild(host); }
+    host.innerHTML = `
+      <div class="launch-inner">
+        <div class="launch-logo">M</div>
+        <h1>Who's training?</h1>
+        <div class="launch-grid">
+          ${data.map(p => `<button class="launch-card" data-id="${p.id}">
+            <div class="launch-av" style="background:${p.meta.color}">${p.meta.emoji}</div>
+            <b>${UI.esc(p.meta.name)}</b><small>Level ${LB.levelOf(p.state).level}</small>
+          </button>`).join('')}
+          <button class="launch-card" id="launch-new"><div class="launch-av add">＋</div><b>New</b><small>profile</small></button>
+        </div>
+      </div>`;
+    host.classList.remove('hidden');
+    host.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { Store.switchProfile(b.dataset.id); App.enterApp(); });
+    host.querySelector('#launch-new').onclick = () => newProfile();   // creates → afterProfileChange → enterApp
+  }
+
   /* ---------- profile switcher ---------- */
   function switcher() {
     const data = Store.allProfilesData();
@@ -161,5 +183,5 @@ App.Profiles = (function () {
     });
   }
 
-  return { switcher, newProfile, editProfile, shareApp, shareProfile, addFriend };
+  return { launchSelector, switcher, newProfile, editProfile, shareApp, shareProfile, addFriend };
 })();
