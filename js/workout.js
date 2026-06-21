@@ -11,9 +11,17 @@ App.Workout = (function () {
   let editMode = false;
 
   /* ---------- build / resolve ---------- */
+  // Progression increment per training status (returning lifters regain
+  // strength fast — "muscle memory" — so jumps are bigger early).
+  const STATUS_INC = { beginner: 5, returning: 10, intermediate: 5, advanced: 2.5 };
+  function progressionInc(type) {
+    const base = STATUS_INC[Store.profile().lifterStatus] || 5;
+    return type === 'acc' ? Math.max(2.5, base / 2) : base;
+  }
+
   function makeInstance(ex, bias) {
     const scheme = DATA.repScheme(ex.type, bias);
-    const reps = ex.reps || scheme.reps;
+    const reps = ex.editedReps ? ex.reps : (ex.reps || scheme.reps);
     const setCount = ex.type === 'cond' ? 1 : (ex.sets || 3);
     const hist = Store.exerciseHistory(ex.key);
     let suggest = '', lastNote = null;
@@ -21,10 +29,10 @@ App.Workout = (function () {
       const last = hist[0];
       lastNote = `Last: ${last.weight} lb × ${last.reps}`;
       suggest = last.weight;
-      if (scheme.high && last.reps >= scheme.high) suggest = +last.weight + 5;
+      if (scheme.high && last.reps >= scheme.high) suggest = +last.weight + progressionInc(ex.type);
     }
     return {
-      key: ex.key, name: ex.name, type: ex.type, reps, rir: scheme.rir || '',
+      key: ex.key, name: ex.name, type: ex.type, reps, rir: scheme.rir || '', editedReps: !!ex.editedReps,
       muscle: ex.muscle || null, group: ex.group || null, mj: !!ex.mj, stretch: !!ex.stretch, lp: !!ex.lp,
       suggest, lastNote,
       sets: Array.from({ length: setCount }, () => ({ weight: suggest, reps: '', done: false }))
@@ -53,10 +61,14 @@ App.Workout = (function () {
   }
 
   function resolveDef(entry) {
-    if (entry.custom) return { key: entry.key, name: entry.custom.name, type: entry.custom.type || 'acc', sets: entry.sets || 3, reps: entry.custom.reps };
+    if (entry.custom) return { key: entry.key, name: entry.name || entry.custom.name, type: entry.custom.type || 'acc', sets: entry.sets || 3, reps: entry.reps || entry.custom.reps, editedReps: !!entry.reps };
     const base = DATA.ALL[entry.key];
     if (!base) return null;
-    return Object.assign({}, base, entry.sets ? { sets: entry.sets } : {});
+    const d = Object.assign({}, base);
+    if (entry.sets) d.sets = entry.sets;
+    if (entry.name) d.name = entry.name;
+    if (entry.reps) { d.reps = entry.reps; d.editedReps = true; }
+    return d;
   }
 
   function build(dateKey) {
@@ -133,7 +145,11 @@ App.Workout = (function () {
     const list = current.exercises.map(ex => {
       const known = DATA.ALL[ex.key];
       const sets = ex.type === 'cond' ? 1 : ex.sets.length;
-      return known ? { key: ex.key, sets } : { key: ex.key, custom: { name: ex.name, type: ex.type, reps: ex.reps }, sets };
+      if (!known) return { key: ex.key, custom: { name: ex.name, type: ex.type, reps: ex.reps }, sets };
+      const entry = { key: ex.key, sets };
+      if (ex.name !== known.name) entry.name = ex.name;       // edited name (e.g. box height)
+      if (ex.editedReps) entry.reps = ex.reps;                // edited reps/target
+      return entry;
     });
     Store.setProgramOverride(current.dayType, list);
   }
@@ -259,10 +275,38 @@ App.Workout = (function () {
         <button class="icon-btn" data-rm="${i}" style="width:32px;height:32px;color:var(--bad);border-color:rgba(255,93,93,.3);font-size:18px">✕</button>
       </div>
       <div class="btn-row" style="margin-top:10px">
+        <button class="btn small" data-edit="${i}">✎ Edit</button>
         <button class="btn small" data-swap="${i}">⇄ Swap</button>
         ${ex.type === 'cond' ? '' : `<button class="btn small" data-sets="${i}" data-d="-1">− set</button><button class="btn small" data-sets="${i}" data-d="1">＋ set</button>`}
       </div>
     </div>`;
+  }
+
+  // Edit an exercise's name, reps/target and set count (e.g. box-jump height).
+  function editDetailsSheet(i, c) {
+    const ex = current.exercises[i];
+    UI.modal(`
+      <h2>Edit exercise</h2>
+      ${UI.field('Name', `<input class="input" id="ed-name" value="${UI.esc(ex.name)}">`)}
+      <div class="inline-fields" style="margin-bottom:14px">
+        <div class="field" style="margin:0"><label>Reps / target</label><input class="input" id="ed-reps" value="${UI.esc(ex.reps)}" placeholder="e.g. 8–10 or 30 in"></div>
+        ${ex.type === 'cond' ? '' : `<div class="field" style="margin:0"><label>Sets</label><input class="input" id="ed-sets" type="number" min="1" max="8" value="${ex.sets.length}"></div>`}
+      </div>
+      <button class="btn primary" id="ed-save">Save</button>
+    `, (m, close) => {
+      m.querySelector('#ed-save').onclick = () => {
+        ex.name = m.querySelector('#ed-name').value.trim() || ex.name;
+        const newReps = m.querySelector('#ed-reps').value.trim();
+        if (newReps && newReps !== ex.reps) { ex.reps = newReps; ex.editedReps = true; }
+        const setsEl = m.querySelector('#ed-sets');
+        if (setsEl) {
+          const n = UI.clamp(+setsEl.value || ex.sets.length, 1, 8);
+          while (ex.sets.length < n) ex.sets.push({ weight: ex.suggest || '', reps: '', done: false });
+          ex.sets.length = n;
+        }
+        close(); persist(); syncOverride(); render(c, current.dateKey); UI.toast('Updated', 'good');
+      };
+    });
   }
 
   /* ---------- run session render ---------- */
@@ -500,6 +544,7 @@ App.Workout = (function () {
   /* ---------- edit-mode events ---------- */
   function wireEdit(container) {
     container.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => removeExercise(+b.dataset.rm, container));
+    container.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => editDetailsSheet(+b.dataset.edit, container));
     container.querySelectorAll('[data-swap]').forEach(b => b.onclick = () => picker('swap', +b.dataset.swap, container));
     container.querySelectorAll('[data-sets]').forEach(b => b.onclick = () => changeSets(+b.dataset.sets, +b.dataset.d, container));
     const add = container.querySelector('#wk-add'); if (add) add.onclick = () => picker('add', null, container);

@@ -103,19 +103,26 @@ App.DATA = (function () {
     frontSquat:  { key:'frontSquat', name:'Front Squat',           type:'main', sets:4, ratio:0.85, anchor:'squat' },
     rdl:         { key:'rdl',        name:'Romanian Deadlift',     type:'main', sets:4, ratio:1.10, anchor:'squat' },
     // Lower accessories
+    deadlift:    { key:'deadlift',   name:'Deadlift',              type:'main', sets:3, ratio:1.25, anchor:'squat' },
+    dbOHP:       { key:'dbOHP',      name:'DB Shoulder Press',     type:'main', sets:3 },
     legPress:    { key:'legPress',   name:'Leg Press',             type:'acc',  sets:3 },
     bulgarian:   { key:'bulgarian',  name:'Bulgarian Split Squat', type:'acc',  sets:3 },
     legCurl:     { key:'legCurl',    name:'Lying Leg Curl',        type:'acc',  sets:3 },
+    legExt:      { key:'legExt',     name:'Leg Extension',         type:'acc',  sets:3 },
+    walkLunge:   { key:'walkLunge',  name:'Walking Lunge',         type:'acc',  sets:3, reps:'10–12/leg' },
     calfStand:   { key:'calfStand',  name:'Standing Calf Raise',   type:'acc',  sets:4 },
     calfSeat:    { key:'calfSeat',   name:'Seated Calf Raise',     type:'acc',  sets:4 },
+    weightedDip: { key:'weightedDip',name:'Weighted Dips',         type:'main', sets:3 },
+    hammerCurl:  { key:'hammerCurl', name:'Hammer Curl',           type:'acc',  sets:3 },
     // Plyo / conditioning
-    boxJump:     { key:'boxJump',    name:'Box Jumps (48")',       type:'plyo', sets:3, reps:'3' },
+    boxJump:     { key:'boxJump',    name:'Box Jumps (24")',       type:'plyo', sets:3, reps:'3' },
     broadJump:   { key:'broadJump',  name:'Broad Jumps',           type:'plyo', sets:3, reps:'3' },
     // Abs / core
     legRaise:    { key:'legRaise',   name:'Hanging Leg Raises',    type:'abs',  sets:3, reps:'12–15' },
     cableCrunch: { key:'cableCrunch',name:'Cable Crunch',          type:'abs',  sets:3, reps:'12–15' },
     plank:       { key:'plank',      name:'Weighted Plank',        type:'abs',  sets:3, reps:'45–60s' },
     abWheel:     { key:'abWheel',    name:'Ab Wheel Rollout',      type:'abs',  sets:3, reps:'10–12' },
+    pallof:      { key:'pallof',     name:'Pallof Press',          type:'abs',  sets:3, reps:'10–12/side' },
   };
 
   // Four training days. Order matters (plyo before legs).
@@ -134,7 +141,7 @@ App.DATA = (function () {
     },
     lowerB: {
       name:'Lower B — Hinge + Single Leg',
-      exercises:[ E.broadJump, E.frontSquat, E.rdl, E.bulgarian, E.legCurl, E.calfSeat, E.legRaise ]
+      exercises:[ E.broadJump, E.frontSquat, E.deadlift, E.walkLunge, E.legExt, E.calfSeat, E.pallof ]
     },
     // Push / Pull / Legs (6-day split). Long-muscle-length emphasis.
     push: {
@@ -231,12 +238,9 @@ App.DATA = (function () {
   // Extra strength alternatives for swapping.
   const EXTRA = {
     dbBench:     { key:'dbBench',     name:'Flat Dumbbell Press',  type:'main', sets:4 },
-    weightedDip: { key:'weightedDip', name:'Weighted Dips',        type:'main', sets:3 },
     cableFly:    { key:'cableFly',    name:'Cable Fly',            type:'acc',  sets:3 },
     hackSquat:   { key:'hackSquat',   name:'Hack Squat',           type:'main', sets:4 },
-    legExt:      { key:'legExt',      name:'Leg Extension',        type:'acc',  sets:3 },
     hipThrust:   { key:'hipThrust',   name:'Barbell Hip Thrust',   type:'main', sets:3 },
-    walkLunge:   { key:'walkLunge',   name:'Walking Lunge',        type:'acc',  sets:3 },
     cableLat:    { key:'cableLat',    name:'Cable Lateral Raise',  type:'acc',  sets:3 },
     rearDelt:    { key:'rearDelt',    name:'Rear Delt Fly',        type:'acc',  sets:3 },
     hammerCurl:  { key:'hammerCurl',  name:'Hammer Curl',          type:'acc',  sets:3 },
@@ -257,10 +261,11 @@ App.DATA = (function () {
     ohp:'Shoulders', lateral:'Shoulders', facepull:'Shoulders', cableLat:'Shoulders', rearDelt:'Shoulders',
     pullup:'Back', latPull:'Back', bbRow:'Back', csRow:'Back', tbar:'Back', seatedRow:'Back',
     bbCurl:'Arms', inclineCurl:'Arms', pushdown:'Arms', skull:'Arms', hammerCurl:'Arms', ropePush:'Arms', preacher:'Arms',
-    squat:'Legs', frontSquat:'Legs', rdl:'Legs', legPress:'Legs', bulgarian:'Legs', legCurl:'Legs',
+    squat:'Legs', frontSquat:'Legs', rdl:'Legs', deadlift:'Legs', legPress:'Legs', bulgarian:'Legs', legCurl:'Legs',
     calfStand:'Legs', calfSeat:'Legs', hackSquat:'Legs', legExt:'Legs', hipThrust:'Legs', walkLunge:'Legs',
+    weightedDip:'Chest', dbOHP:'Shoulders', hammerCurl:'Arms',
     boxJump:'Power', broadJump:'Power',
-    legRaise:'Core', cableCrunch:'Core', plank:'Core', abWheel:'Core', abWheel2:'Core', russian:'Core', deadbug:'Core',
+    legRaise:'Core', cableCrunch:'Core', plank:'Core', abWheel:'Core', abWheel2:'Core', russian:'Core', deadbug:'Core', pallof:'Core',
     inclineWalk:'Cardio', ruck:'Cardio', stairmaster:'Cardio', bikeZ2:'Cardio', rowInt:'Cardio', jogEasy:'Cardio', jumpRope:'Cardio',
   };
   Object.keys(ALL).forEach(k => { ALL[k].cat = CAT[k] || 'Other'; });
@@ -274,20 +279,21 @@ App.DATA = (function () {
     bbCurl:'biceps', inclineCurl:'biceps', preacher:'biceps', hammerCurl:'biceps',
     pushdown:'triceps', skull:'triceps', ropePush:'triceps',
     squat:'quads', frontSquat:'quads', legPress:'quads', hackSquat:'quads', legExt:'quads', bulgarian:'quads', walkLunge:'quads',
-    rdl:'hamstrings', legCurl:'hamstrings', hipThrust:'glutes',
+    rdl:'hamstrings', legCurl:'hamstrings', deadlift:'hamstrings', hipThrust:'glutes',
+    weightedDip:'chest', dbOHP:'delts', hammerCurl:'biceps',
     calfStand:'calves', calfSeat:'calves',
     boxJump:'power', broadJump:'power',
-    legRaise:'core', cableCrunch:'core', plank:'core', abWheel:'core', abWheel2:'core', russian:'core', deadbug:'core',
+    legRaise:'core', cableCrunch:'core', plank:'core', abWheel:'core', abWheel2:'core', russian:'core', deadbug:'core', pallof:'core',
   };
   // antagonist group, for agonist-antagonist paired sets (supersets)
   const GROUP = {
     inclineBB:'horizPush', flatBench:'horizPush', inclineDB:'horizPush', dbBench:'horizPush', weightedDip:'horizPush', cableFly:'horizPush',
-    ohp:'vertPush', bbRow:'horizPull', csRow:'horizPull', tbar:'horizPull', seatedRow:'horizPull',
+    ohp:'vertPush', dbOHP:'vertPush', bbRow:'horizPull', csRow:'horizPull', tbar:'horizPull', seatedRow:'horizPull',
     pullup:'vertPull', latPull:'vertPull',
     bbCurl:'biceps', inclineCurl:'biceps', preacher:'biceps', hammerCurl:'biceps',
     pushdown:'triceps', skull:'triceps', ropePush:'triceps',
     squat:'quad', frontSquat:'quad', legPress:'quad', hackSquat:'quad', legExt:'quad', bulgarian:'quad', walkLunge:'quad',
-    rdl:'ham', legCurl:'ham',
+    rdl:'ham', legCurl:'ham', deadlift:'ham',
   };
   const ANTAG = { horizPush:'horizPull', horizPull:'horizPush', vertPush:'vertPull', vertPull:'vertPush', quad:'ham', ham:'quad', biceps:'triceps', triceps:'biceps' };
   // exercises that load the muscle hard at long lengths (stretch-mediated hypertrophy)

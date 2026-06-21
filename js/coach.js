@@ -64,6 +64,14 @@ App.Coach = (function () {
     const protAvg = avgMacro('protein', 7);
     if (protAvg != null && protAvg < p.protein * 0.85) out.push({ icon:'🥩', tone:'warn', title:'Protein is short', text:`You've averaged ${Math.round(protAvg)}g protein vs a ${p.protein}g target. Anchor every meal with a protein source.` });
 
+    // 4b) Returning lifter — muscle memory (first 4 weeks)
+    if (p.lifterStatus === 'returning' && Store.daysIntoProgram() <= 28)
+      out.push({ icon:'🧠', tone:'good', title:'Muscle memory is on your side', text:'As a returning lifter, strength comes back far faster than building it new. Add weight or reps to your top sets nearly every session for the first 3–4 weeks.' });
+
+    // 4c) Natural foundations (rotating reminder) — sleep, recovery, no shortcuts
+    if (Store.todayKey().charCodeAt(9) % 3 === 0)
+      out.push({ icon:'😴', tone:'info', title:'Protect the basics', text:'Sleep 7–9 hrs, eat enough (don\'t fear fats), and keep rest days as rest — heavy compounds + recovery do more for your hormones than any supplement.' });
+
     // 5) Hydration
     if ((p.waterGoal || 0) > 0 && Store.water() === 0 && new Date().getHours() >= 12) out.push({ icon:'💧', tone:'info', title:'Hydrate', text:`No water logged yet today. Aim for ${p.waterGoal} cups — it supports performance and recovery.` });
 

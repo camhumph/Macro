@@ -120,6 +120,7 @@ window.App = window.App || {};
       <button class="btn ghost small" id="s-race" style="width:100%;margin:12px 0 0">🏃 Race / marathon setup</button>
       ${UI.field('Diet phase', G.phaseSelect(p.dietPhase))}
       ${UI.field('Bulking pace', G.gainRateSelect(p.gainRate))}
+      ${UI.field('Lifting experience', `<select class="input" id="g-lifter">${[['beginner','Beginner (new to lifting)'],['returning','Returning / detrained (muscle memory)'],['intermediate','Intermediate'],['advanced','Advanced']].map(([k,l])=>`<option value="${k}" ${k===(p.lifterStatus||'returning')?'selected':''}>${l}</option>`).join('')}</select>`)}
 
       <div class="divider"></div>
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Your stats</label>
@@ -246,6 +247,7 @@ window.App = window.App || {};
           daysPerWeek: +m.querySelector('#g-days').value || 0,
           dietPhase: m.querySelector('#g-phase').value,
           gainRate: m.querySelector('#g-rate').value,
+          lifterStatus: m.querySelector('#g-lifter').value,
           goalWeight: +m.querySelector('#s-gw').value || 0,
           scheduleMode: flex.classList.contains('on') ? 'flexible' : 'fixed',
           restTimerOn: rt.classList.contains('on'),
