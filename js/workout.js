@@ -71,18 +71,18 @@ App.Workout = (function () {
     const choice = Store.getDayChoice(dateKey);   // manual override / adapt for this day
 
     let dayType, deload = false;
+    const isRunChoice = choice && (choice.type || '').startsWith('run:');
     const isChoice = choice && (DATA.DAYS[choice.type] || (choice.type || '').startsWith('rt_'));
 
-    // Marathon / race training: running plan drives the day (unless overridden).
-    if (!isChoice && App.Running && App.Running.active(Store.profile())) {
-      if (existing && existing.isRun) return existing;
-      const rx = App.Running.prescriptionFor(Store.profile(), dateKey);
-      if (rx.type !== 'rest') {
-        return { dateKey, week, isRun: true, dayType: 'run_' + rx.type, dayName: rx.name,
-                 run: rx, planTitle: pl.title, exercises: [], done: false, actual: {} };
-      }
-      // rest day → fall through to rest card
-      return { dateKey, week, isRun: false, dayType: 'rest', dayName: 'Rest / Recovery', exercises: [], bias: pl.bias };
+    // Marathon / race training: running plan drives the day (unless the user
+    // explicitly switched to a lifting/rest day).
+    if (App.Running && App.Running.active(Store.profile()) && (isRunChoice || !choice)) {
+      const overrideType = isRunChoice ? choice.type.slice(4) : null;
+      const rx = App.Running.rxFor(Store.profile(), dateKey, overrideType);
+      if (rx.type === 'rest') return { dateKey, week, isRun: false, dayType: 'rest', dayName: 'Rest / Recovery', exercises: [], bias: pl.bias };
+      if (existing && existing.isRun && existing.run && existing.run.type === rx.type) return existing;
+      return { dateKey, week, isRun: true, dayType: 'run_' + rx.type, dayName: rx.name,
+               run: rx, planTitle: pl.title, exercises: [], done: false, actual: {} };
     }
 
     if (isChoice) {
@@ -269,6 +269,8 @@ App.Workout = (function () {
       <h2 style="margin:4px 2px 6px;font-size:22px;letter-spacing:-.4px">${UI.esc(r.name)}</h2>
       <p class="muted" style="margin:0 0 14px;font-size:13px">${UI.esc(r.detail)}</p>
 
+      ${runSuggestionHTML()}
+
       <div class="card">
         <div class="ring-wrap">
           <div style="flex:1;display:flex;flex-direction:column;gap:14px">
@@ -298,6 +300,8 @@ App.Workout = (function () {
     };
     mi.addEventListener('input', showPace); min.addEventListener('input', showPace); showPace();
     container.querySelector('#wk-switch').onclick = () => switchSheet(container);
+    const swap = container.querySelector('#run-swap');
+    if (swap) swap.onclick = () => { Store.setDayChoice(current.dateKey, 'run:' + swap.dataset.to, false); renderRun(container); UI.toast('Run updated', 'good'); };
     container.querySelector('#run-done').onclick = () => {
       current.done = !current.done;
       current.actual = { miles: +mi.value || r.miles, min: +min.value || 0 };
@@ -305,6 +309,13 @@ App.Workout = (function () {
       UI.toast(current.done ? 'Run logged 🏃' : 'Marked incomplete', 'good');
       renderRun(container);
     };
+  }
+
+  function runSuggestionHTML() {
+    const s = App.Running.suggestion();
+    const cls = s.tone === 'bad' ? 'warn' : s.tone === 'warn' ? 'warn' : s.tone === 'good' ? 'good' : 'info';
+    const ico = s.tone === 'bad' ? '🚑' : s.tone === 'warn' ? '⚠️' : s.tone === 'good' ? '✅' : '🧭';
+    return `<div class="banner ${cls}" style="margin-bottom:14px"><span class="b-ico">${ico}</span><div><b>${UI.esc(s.title)}</b>${UI.esc(s.text)}${s.swapTo ? ` <button class="link" id="run-swap" data-to="${s.swapTo}" style="color:var(--accent);font-weight:700">Switch to ${s.swapTo} ▸</button>` : ''}</div></div>`;
   }
 
   function recoBanner() {
@@ -413,15 +424,21 @@ App.Workout = (function () {
     const cur = current ? current.dayType : null;
     const next = nextRotationType();
     const nextName = DATA.DAYS[next].name;
+    const runner = App.Running && App.Running.active();
+    const RUN_TYPES = [['easy','Easy Run'],['long','Long Run'],['tempo','Tempo'],['interval','Intervals'],['recovery','Recovery']];
     UI.modal(`
       <h2>Today's workout</h2>
       <p class="muted" style="margin:-8px 0 14px;font-size:13px">Pick what to train today, or let it adapt to how you feel. This only changes today.</p>
 
-      <div class="meal-head"><b>Recommended</b><span></span></div>
-      <div class="search-result rec" data-day="${next}">
-        <div class="sr-main"><b>${UI.esc(nextName)}</b><small>Next up in your rotation</small></div>
-        <div style="color:var(--accent);font-size:22px">→</div>
-      </div>
+      ${runner ? `
+        <div class="meal-head"><b>Runs</b><span>tap to set today</span></div>
+        ${RUN_TYPES.map(([t, l]) => `<div class="search-result" data-run="${t}"><div class="sr-main"><b>${l}</b><small>${App.Running.paceStr(App.Running.plan().paces[t === 'long' ? 'long' : t === 'tempo' ? 'tempo' : t === 'interval' ? 'interval' : t === 'recovery' ? 'recovery' : 'easy'])} /mi</small></div><div style="color:var(--accent);font-size:22px">→</div></div>`).join('')}
+      ` : `
+        <div class="meal-head"><b>Recommended</b><span></span></div>
+        <div class="search-result rec" data-day="${next}">
+          <div class="sr-main"><b>${UI.esc(nextName)}</b><small>Next up in your rotation</small></div>
+          <div style="color:var(--accent);font-size:22px">→</div>
+        </div>`}
 
       <div class="meal-head"><b>Adjust for how you feel</b><span></span></div>
       <div class="search-result" data-adapt="deload"><div class="sr-main"><b>Sore or tired — go lighter</b><small>Deload: fewer sets, leave 3–4 reps in reserve</small></div><div style="font-size:20px">🪫</div></div>
@@ -452,6 +469,7 @@ App.Workout = (function () {
     `, (m, close) => {
       const choose = (type, deload) => { Store.setDayChoice(current.dateKey, type, deload); close(); render(container, current.dateKey); UI.toast(deload ? 'Deload day set' : 'Workout set', 'good'); };
       m.querySelectorAll('[data-day]').forEach(el => el.onclick = (e) => { if (e.target.closest('[data-rtdel]')) return; choose(el.dataset.day, false); });
+      m.querySelectorAll('[data-run]').forEach(el => el.onclick = () => choose('run:' + el.dataset.run, false));
       m.querySelectorAll('[data-sore]').forEach(el => el.onclick = () => choose(complementFor(el.dataset.sore), false));
       m.querySelectorAll('[data-rtdel]').forEach(b => b.onclick = (e) => { e.stopPropagation(); Store.removeRoutine(b.dataset.rtdel); close(); switchSheet(container); });
       m.querySelector('[data-adapt="deload"]').onclick = () => choose(next, true);

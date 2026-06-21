@@ -133,17 +133,78 @@ App.Running = (function () {
     return { 0:'long', 1:'easy', 2:'tempo', 3:'easy', 4:'interval', 5:'rest', 6:'easy' };
   }
 
-  function prescriptionFor(profile, dateKey) {
-    const pl = plan(profile);
-    const dow = new Date(dateKey + 'T00:00:00').getDay();
-    const type = pl.sched[dow] || 'rest';
+  // Build the prescription for a given run type from a plan.
+  function buildRx(pl, type) {
     if (type === 'rest') return { type: 'rest', name: 'Rest / Recovery' };
     let miles, paceKey, name, detail;
-    if (type === 'long')      { miles = pl.longRun; paceKey = 'long'; name = `Long Run — ${miles} mi`; detail = 'Conversational effort. Stay relaxed and build endurance.'; }
-    else if (type === 'tempo')   { miles = Math.max(4, Math.round(pl.weekMileage * 0.18)); paceKey = 'tempo'; name = `Tempo — ${miles} mi`; detail = 'Comfortably hard at threshold. e.g. 1 mi easy, middle at tempo, 1 mi easy.'; }
-    else if (type === 'interval'){ miles = Math.max(3, Math.round(pl.weekMileage * 0.15)); paceKey = 'interval'; name = `Intervals — ${miles} mi`; detail = 'e.g. 6×800m at interval pace with equal jog recovery + warmup/cooldown.'; }
-    else                         { miles = Math.max(3, Math.round(pl.weekMileage * 0.16)); paceKey = 'easy'; name = `Easy Run — ${miles} mi`; detail = 'Relaxed aerobic miles. Keep it easy.'; }
+    if (type === 'long')          { miles = pl.longRun; paceKey = 'long'; name = `Long Run — ${miles} mi`; detail = 'Conversational effort. Stay relaxed and build endurance.'; }
+    else if (type === 'tempo')    { miles = Math.max(4, Math.round(pl.weekMileage * 0.18)); paceKey = 'tempo'; name = `Tempo — ${miles} mi`; detail = 'Comfortably hard at threshold. e.g. 1 mi easy, middle at tempo, 1 mi easy.'; }
+    else if (type === 'interval') { miles = Math.max(3, Math.round(pl.weekMileage * 0.15)); paceKey = 'interval'; name = `Intervals — ${miles} mi`; detail = 'e.g. 6×800m at interval pace with equal jog recovery + warmup/cooldown.'; }
+    else if (type === 'recovery') { miles = Math.max(2, Math.round(pl.weekMileage * 0.10)); paceKey = 'recovery'; name = `Recovery — ${miles} mi`; detail = 'Very easy shakeout to flush the legs.'; }
+    else                          { miles = Math.max(3, Math.round(pl.weekMileage * 0.16)); paceKey = 'easy'; name = `Easy Run — ${miles} mi`; detail = 'Relaxed aerobic miles. Keep it easy.'; }
     return { type, name, miles, paceKey, paceSec: pl.paces[paceKey], paceLabel: paceStr(pl.paces[paceKey]), detail };
+  }
+  // Prescription for a date (optionally forcing a run type).
+  function rxFor(profile, dateKey, overrideType) {
+    const pl = plan(profile);
+    const type = overrideType || pl.sched[new Date(dateKey + 'T00:00:00').getDay()] || 'rest';
+    return buildRx(pl, type);
+  }
+  function prescriptionFor(profile, dateKey) { return rxFor(profile, dateKey); }
+
+  /* ---------- analysis from actual logged runs ---------- */
+  function dateNDaysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return Store.todayKey(d); }
+  function runHistory(days) {
+    const start = dateNDaysAgo(days), st = Store.get();
+    return Object.values(st.workoutLogs)
+      .filter(l => l.isRun && l.done && l.dateKey >= start)
+      .map(l => ({ date: l.dateKey, miles: (l.actual && l.actual.miles) || (l.run && l.run.miles) || 0, min: (l.actual && l.actual.min) || 0, type: (l.run && l.run.type) || 'easy' }))
+      .sort((a, b) => a.date < b.date ? -1 : 1);
+  }
+  function analysis(profile) {
+    const pl = plan(profile);
+    const last7 = runHistory(7), last28 = runHistory(28);
+    const week7Mi = last7.reduce((s, r) => s + r.miles, 0);
+    const hardMi = last7.filter(r => ['tempo', 'interval', 'race'].includes(r.type)).reduce((s, r) => s + r.miles, 0);
+    const longThisWeek = last7.some(r => r.miles >= pl.longRun * 0.8);
+    const daysSince = last28.length ? Store.dayDiff(last28[last28.length - 1].date, Store.todayKey()) : null;
+    return {
+      week7Mi: Math.round(week7Mi), avg4wkMi: Math.round((last28.reduce((s, r) => s + r.miles, 0)) / 4),
+      longestRecent: Math.round(last28.reduce((m, r) => Math.max(m, r.miles), 0)),
+      longThisWeek, hardShare: week7Mi > 0 ? hardMi / week7Mi : 0, daysSince,
+      behindMi: Math.round(Math.max(0, pl.weekMileage - week7Mi)), runs7: last7.length,
+      weekTarget: pl.weekMileage, longTarget: pl.longRun, phase: pl.phase,
+    };
+  }
+
+  // What should I run today? Considers schedule, what you've already done, and load.
+  function suggestion(profile) {
+    profile = profile || Store.profile();
+    const today = Store.todayKey();
+    const rx = rxFor(profile, today);
+    const an = analysis(profile);
+    const acwr = (App.Workload && App.Workload.acwr().ratio) || 0;
+    const dow = new Date(today + 'T00:00:00').getDay();
+    if (acwr > 1.5) return { title: 'Recovery recommended', tone: 'bad', swapTo: 'recovery', text: `Your load ratio is ${acwr} (high). Make today a very easy recovery run or rest, even if something harder is scheduled.` };
+    if (rx.type !== 'rest' && (rx.type === 'tempo' || rx.type === 'interval') && an.hardShare > 0.45)
+      return { title: 'Keep it easy today', tone: 'warn', swapTo: 'easy', text: `~${Math.round(an.hardShare * 100)}% of this week's miles have been hard. Keep ~80% easy — swap this for an easy run.` };
+    if (rx.type === 'rest' && !an.longThisWeek && [5, 6, 0].includes(dow))
+      return { title: 'Long run is due', tone: 'info', swapTo: 'long', text: `You haven't done your long run (${an.longTarget} mi) this week — today is a good day for it.` };
+    if (rx.type !== 'rest' && an.behindMi > 6)
+      return { title: 'Catch-up run', tone: 'info', text: `You're ${an.behindMi} mi under this week's ${an.weekTarget} mi target — today's ${rx.name.toLowerCase()} helps you catch up.` };
+    if (an.daysSince != null && an.daysSince >= 3 && rx.type === 'rest')
+      return { title: 'Time to run', tone: 'info', swapTo: 'easy', text: `It's been ${an.daysSince} days since your last run — an easy run keeps your aerobic base.` };
+    return { title: rx.type === 'rest' ? 'Rest day' : 'On plan', tone: 'good', text: rx.type === 'rest' ? 'Recovery is part of the plan — take it easy today.' : `Today's ${rx.name} fits your ${an.phase.toLowerCase()} phase. Hit the target pace and effort.` };
+  }
+
+  // Running insights for the Coach card.
+  function runInsights(profile) {
+    const an = analysis(profile), out = [];
+    const sug = suggestion(profile);
+    out.push({ icon: '🏃', tone: sug.tone, title: sug.title, text: sug.text });
+    if (an.runs7 === 0 && an.daysSince != null) out.push({ icon: '📅', tone: 'warn', title: 'No runs this week', text: 'Consistency drives endurance gains — get an easy run in to stay on track for your race.' });
+    else if (an.week7Mi > an.weekTarget * 1.25) out.push({ icon: '🛑', tone: 'warn', title: 'Mileage spike', text: `You're at ${an.week7Mi} mi vs a ${an.weekTarget} mi target — big jumps raise injury risk. Hold steady.` });
+    return out.slice(0, 2);
   }
 
   function active(profile) { return ((profile || Store.profile()).goals || []).includes('marathon') && get(profile).goalTimeSec > 0; }
@@ -241,5 +302,5 @@ App.Running = (function () {
       <button class="btn" id="rc-setup" style="margin-top:14px">Edit race setup</button>`;
   }
 
-  return { DISTANCES, plan, prescriptionFor, paceStr, hms, hmsToSec, weeksToRace, daysToRace, get, active, setupSheet, planCard, vdotFromRace };
+  return { DISTANCES, plan, prescriptionFor, rxFor, buildRx, analysis, suggestion, runInsights, paceStr, hms, hmsToSec, weeksToRace, daysToRace, get, active, setupSheet, planCard, vdotFromRace };
 })();

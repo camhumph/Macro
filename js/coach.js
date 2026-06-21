@@ -28,6 +28,11 @@ App.Coach = (function () {
     const p = Store.profile();
     const pl = App.Goals.plan();
 
+    // 0) Running guidance first when race training is active
+    if (App.Running && App.Running.active()) {
+      (App.Running.runInsights() || []).forEach(i => out.push(i));
+    }
+
     // 1) Workload safety (ACWR)
     const a = App.Workload.acwr();
     if (a.ratio > 1.5) out.push({ icon:'🚑', tone:'bad', title:'Back off — load spiked', text:`Your acute:chronic load ratio is ${a.ratio} (high-risk zone). Take an easy day or a deload to dodge injury; ramp back up gradually.` });
