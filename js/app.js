@@ -119,6 +119,7 @@ window.App = window.App || {};
       ${G.goalChips(goals)}
       <button class="btn ghost small" id="s-race" style="width:100%;margin:12px 0 0">🏃 Race / marathon setup</button>
       ${UI.field('Diet phase', G.phaseSelect(p.dietPhase))}
+      ${UI.field('Bulking pace', G.gainRateSelect(p.gainRate))}
 
       <div class="divider"></div>
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Your stats</label>
@@ -173,6 +174,10 @@ window.App = window.App || {};
 
       <div class="divider"></div>
       <div class="list-row">
+        <div class="lr-l"><b>Advanced intensity techniques</b><small>Rest-pause / drop sets / eccentrics on final sets (hypertrophy)</small></div>
+        <div class="switch ${p.intensityTech?'on':''}" id="s-itech"></div>
+      </div>
+      <div class="list-row">
         <div class="lr-l"><b>Rest timer</b><small>Auto-start between sets</small></div>
         <div class="switch ${p.restTimerOn?'on':''}" id="s-rt"></div>
       </div>
@@ -203,6 +208,7 @@ window.App = window.App || {};
       const rem = m.querySelector('#s-rem'); rem.onclick = () => rem.classList.toggle('on');
       const flex = m.querySelector('#s-flex'); flex.onclick = () => flex.classList.toggle('on');
       const rt = m.querySelector('#s-rt'); rt.onclick = () => rt.classList.toggle('on');
+      const itech = m.querySelector('#s-itech'); itech.onclick = () => itech.classList.toggle('on');
       const custom = m.querySelector('#s-custom');
       custom.onclick = () => { custom.classList.toggle('on'); m.querySelector('#s-macros').classList.toggle('hidden', !custom.classList.contains('on')); };
 
@@ -211,7 +217,7 @@ window.App = window.App || {};
         sex: m.querySelector('#g-sex').value, age:+m.querySelector('#s-age').value || p.age,
         heightIn:+m.querySelector('#s-h').value || p.heightIn, activity:m.querySelector('#g-act').value,
         split:m.querySelector('#g-split').value, daysPerWeek:+m.querySelector('#g-days').value || 0,
-        dietPhase:m.querySelector('#g-phase').value, goalWeight:+m.querySelector('#s-gw').value || 0,
+        dietPhase:m.querySelector('#g-phase').value, gainRate:m.querySelector('#g-rate').value, goalWeight:+m.querySelector('#s-gw').value || 0,
         targetDate:m.querySelector('#s-target').value, goals, startWeight:+m.querySelector('#s-sw').value || Store.latestWeight(),
       });
       const drawPlan = () => {
@@ -220,7 +226,7 @@ window.App = window.App || {};
         m.querySelector('#s-guide').innerHTML = App.Goals.guideCard(pl);
       };
       m.querySelector('#s-recalc').onclick = drawPlan;
-      m.querySelectorAll('[data-goal], #g-sex, #s-age, #s-h, #s-sw, #s-gw, #g-act, #g-split, #g-days, #g-phase, #s-target').forEach(el => el.addEventListener('change', drawPlan));
+      m.querySelectorAll('[data-goal], #g-sex, #s-age, #s-h, #s-sw, #s-gw, #g-act, #g-split, #g-days, #g-phase, #g-rate, #s-target').forEach(el => el.addEventListener('change', drawPlan));
       drawPlan();
 
       m.querySelector('#s-export').onclick = exportBackup;
@@ -239,9 +245,11 @@ window.App = window.App || {};
           split: m.querySelector('#g-split').value,
           daysPerWeek: +m.querySelector('#g-days').value || 0,
           dietPhase: m.querySelector('#g-phase').value,
+          gainRate: m.querySelector('#g-rate').value,
           goalWeight: +m.querySelector('#s-gw').value || 0,
           scheduleMode: flex.classList.contains('on') ? 'flexible' : 'fixed',
           restTimerOn: rt.classList.contains('on'),
+          intensityTech: itech.classList.contains('on'),
           restTimer: +m.querySelector('#s-rtsec').value || 120,
           waterGoal: +m.querySelector('#s-water').value || 8,
           targetDate: m.querySelector('#s-target').value || '',

@@ -116,6 +116,12 @@ App.Workout = (function () {
       if (ex.sets.length > 2) ex.sets.pop();   // trim a set
       ex.rir = '3–4 RIR · deload';
     });
+    // Advanced final-set intensity techniques on hypertrophy/power days
+    if (!deload && Store.profile().intensityTech && (bias === 'hypertrophy' || bias === 'power')) {
+      const TECH = ['Rest-pause', 'Drop set', '3–5s eccentric'];
+      let i = 0;
+      exercises.forEach(ex => { if (ex.type === 'main' || ex.type === 'acc') { ex.finisher = TECH[i % TECH.length]; i++; } });
+    }
     return { dateKey, week, bias, planTitle: pl.title, dayType, dayName, exercises, customized: !!ov, switched: !!choice, deload, isRoutine: !!routine };
   }
 
@@ -184,6 +190,11 @@ App.Workout = (function () {
     return type === 'plyo' ? { cls:'plyo', txt:'Power' } : type === 'abs' ? { cls:'abs', txt:'Core' }
       : type === 'main' ? { cls:'main', txt:'Main' } : type === 'cond' ? { cls:'', txt:'Cardio' } : { cls:'', txt:'Accessory' };
   }
+  function finisherHint(t) {
+    return t === 'Rest-pause' ? 'to failure, rest 15s, rep out again ×2.'
+      : t === 'Drop set' ? 'to failure, drop ~25% load, continue.'
+      : 'lower under control for 3–5 seconds each rep.';
+  }
 
   function exerciseCard(ex, i) {
     const tag = tagFor(ex.type);
@@ -222,6 +233,7 @@ App.Workout = (function () {
         <span class="ex-tag ${tag.cls}">${tag.txt}</span>
       </div>
       ${inner}
+      ${ex.finisher ? `<div class="last-hint"><span class="fin-badge">🔥 Final set: ${ex.finisher}</span> ${finisherHint(ex.finisher)}</div>` : ''}
       ${cue ? `<div class="last-hint suggest">${cue}</div>` : ''}
       ${ex.lastNote ? `<div class="last-hint">${UI.esc(ex.lastNote)} · <span class="suggest">target ${ex.suggest || '—'} lb</span></div>` : (ex.type !== 'cond' ? `<div class="last-hint">First time — log it to start tracking.</div>` : '')}
     </div>`;

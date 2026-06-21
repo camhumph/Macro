@@ -28,6 +28,8 @@ App.Store = (function () {
         goals:['physique'],     // selected goal paths
         running:{ distance:'full', raceDate:'', goalTimeSec:0, weeklyMileage:15, longestRun:6, runsPerWeek:4, experience:'intermediate' },
         dietPhase:'auto',       // 'auto' | 'bulk' | 'cut' | 'maintain'
+        gainRate:'moderate',    // 'lean' | 'moderate' | 'aggressive' | 'max' (bulking pace)
+        intensityTech:true,     // advanced final-set techniques on hypertrophy days
         split:'auto',           // 'auto' | 'fullbody' | 'upperlower' | 'ppl'
         daysPerWeek:0,          // 0 = derive from split
         scheduleMode:'flexible',// 'flexible' (next-in-rotation, adapts) | 'fixed' (weekday-based)

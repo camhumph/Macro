@@ -52,6 +52,14 @@ App.Coach = (function () {
       if (Math.abs(diff) >= 200 && !pl.adaptive) out.push({ icon:'🧮', tone:'info', title:'Metabolism update', text:`Your data shows maintenance near ${m.tdee} cal (${diff>0?'higher':'lower'} than the estimate). Targets are adjusting to your real numbers.` });
     }
 
+    // 3b) Bulking reality / pace
+    if (pl.dir > 0) {
+      const daysIn = Store.daysIntoProgram();
+      const comp = App.Goals.composition ? App.Goals.composition() : null;
+      if (daysIn <= 14) out.push({ icon:'💧', tone:'info', title:'Early scale jump is normal', text:'The first 1–2 weeks of a surplus add several lb of glycogen + water (plus creatine if you take it) — that\'s not fat. Judge real progress over 2–3 weeks.' });
+      else if (comp && comp.fatPct >= 35) out.push({ icon:'🍩', tone:'warn', title:'Gaining fast', text:`At this pace ~${comp.fatPct}% of each pound is fat. Slow the bulk in Settings → Bulking pace to stay leaner.` });
+    }
+
     // 4) Protein adherence (last 7 days)
     const protAvg = avgMacro('protein', 7);
     if (protAvg != null && protAvg < p.protein * 0.85) out.push({ icon:'🥩', tone:'warn', title:'Protein is short', text:`You've averaged ${Math.round(protAvg)}g protein vs a ${p.protein}g target. Anchor every meal with a protein source.` });

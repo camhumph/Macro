@@ -85,6 +85,32 @@ App.Goals = (function () {
   }
 
   /* ---------- the plan ---------- */
+  // Bulking pace (fraction of bodyweight gained per week).
+  const GAIN_RATES = { lean: 0.002, moderate: 0.004, aggressive: 0.0075, max: 0.012 };
+
+  // Expected lean fraction of weight gained, from surplus research
+  // (Garthe/Sanchez/Helms): slower gain → more of it is lean.
+  function leanFraction(ratePctPerWeek) {
+    return UI.clamp(0.85 - 0.818 * (ratePctPerWeek - 0.16), 0.5, 0.9);
+  }
+  // Composition of expected weight gain for the active plan.
+  function composition(profile, weight) {
+    const pl = plan(profile, weight);
+    if (pl.dir <= 0) return null;
+    const w = weight || Store.latestWeight();
+    const ratePct = (pl.weeklyRate / w) * 100;
+    const leanPct = leanFraction(ratePct);
+    return {
+      weeklyRate: pl.weeklyRate, leanPct: Math.round(leanPct * 100), fatPct: Math.round((1 - leanPct) * 100),
+      // glycogen + creatine water is a one-time front-loaded bump (not ongoing)
+      waterLb: weight ? Math.round(UI.clamp(w * 0.03, 4, 9)) : 6,
+    };
+  }
+  function gainRateSelect(v) {
+    const o = [['lean','Lean (~0.2%/wk · most muscle)'],['moderate','Moderate (~0.4%/wk)'],['aggressive','Aggressive (~0.75%/wk)'],['max','Max (~1.2%/wk · most fat)']];
+    return `<select class="input" id="g-rate">${o.map(([k,l]) => `<option value="${k}" ${k===(v||'moderate')?'selected':''}>${l}</option>`).join('')}</select>`;
+  }
+
   // Diet phase can override the goal-derived calorie direction.
   const PHASE = {
     bulk:     { calAdj: 0.12,  dir: 1,  rate: 0.004, name: 'Bulk' },
@@ -109,6 +135,12 @@ App.Goals = (function () {
     if (usingActive && App.Adaptive) {
       const m = App.Adaptive.maintenance();
       if (m) { tdeeVal = m.tdee; adaptive = true; }
+    }
+    // Bulking pace: a chosen gain rate sets the surplus precisely.
+    if (c.dir > 0 && !(+profile.goalWeight > 0)) {
+      const fr = GAIN_RATES[profile.gainRate] || GAIN_RATES.moderate;
+      c.rate = fr;
+      c.calAdj = (fr * weight * 3500 / 7) / tdeeVal;   // surplus → calorie adjustment
     }
     let cal = Math.max(1200, Math.round(tdeeVal * (1 + c.calAdj) / 10) * 10);
     let protein = Math.round(c.proteinPerLb * weight);
@@ -235,7 +267,22 @@ App.Goals = (function () {
         <div class="spread" style="margin-top:6px"><span class="muted">Split</span><b>${pl.splitName} · ${pl.days}×/wk</b></div>
         <div class="spread" style="margin-top:6px"><span class="muted">Emphasis</span><b>${biasLabel(pl.bias)}</b></div>
         <div class="spread" style="margin-top:6px"><span class="muted">Maintenance${pl.adaptive ? ' <span class="pill accent" style="font-size:10px;padding:1px 6px">adaptive</span>' : ''}</span><b>~${pl.tdee} cal</b></div>
-      </div>`;
+      </div>
+      ${compositionCard(pl)}`;
+  }
+  function compositionCard(pl) {
+    if (pl.dir <= 0) return '';
+    const w = Store.latestWeight();
+    const ratePct = (pl.weeklyRate / w) * 100;
+    const lean = Math.round(leanFraction(ratePct) * 100);
+    return `<div class="card" style="margin-top:14px">
+      <b>Projected gain composition</b>
+      <div class="macro-row" style="margin-top:12px">
+        <div class="macro-pill"><b>${lean}%</b><small>Lean</small></div>
+        <div class="macro-pill"><b>${100 - lean}%</b><small>Fat</small></div>
+      </div>
+      <div class="last-hint">At ~${pl.weeklyRate} lb/week, roughly ${lean}% of each pound is lean mass — faster gain means more fat. The first 1–2 weeks also add several lb of glycogen + creatine water (not fat), so don't panic at the early scale jump.</div>
+    </div>`;
   }
 
   function splitSelect(v) {
@@ -258,6 +305,6 @@ App.Goals = (function () {
     return `<div class="card"><b>What to eat</b><ul class="guide-list">${pl.guide.map(x => `<li>${UI.esc(x)}</li>`).join('')}</ul></div>`;
   }
 
-  return { GOALS, GOAL_ORDER, ACTIVITY, tdee, plan, recompute, biasLabel,
-           goalChips, wireGoalChips, sexSelect, activitySelect, splitSelect, daysSelect, phaseSelect, planSummary, guideCard };
+  return { GOALS, GOAL_ORDER, ACTIVITY, tdee, plan, recompute, biasLabel, composition, leanFraction,
+           goalChips, wireGoalChips, sexSelect, activitySelect, splitSelect, daysSelect, phaseSelect, gainRateSelect, planSummary, guideCard };
 })();
