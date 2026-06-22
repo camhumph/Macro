@@ -188,6 +188,10 @@ window.App = window.App || {};
       </div>
 
       <div class="divider"></div>
+      <b>Account & Cloud sync</b>
+      <div id="s-account" style="margin-top:8px"></div>
+
+      <div class="divider"></div>
       <b>Strava</b>
       <div id="s-strava" style="margin-top:8px"></div>
 
@@ -205,6 +209,7 @@ window.App = window.App || {};
     `, (m, close) => {
       G.wireGoalChips(m, goals);
       m.querySelector('#s-race').onclick = () => { close(); App.Running.setupSheet(() => { setProfileInitial(); Router.refresh(); }); };
+      renderAccount(m.querySelector('#s-account'));
       renderStrava(m.querySelector('#s-strava'));
       const rem = m.querySelector('#s-rem'); rem.onclick = () => rem.classList.toggle('on');
       const flex = m.querySelector('#s-flex'); flex.onclick = () => flex.classList.toggle('on');
@@ -272,6 +277,109 @@ window.App = window.App || {};
       m.querySelector('#s-reset').onclick = () => {
         if (confirm('Erase this profile\'s workouts, food and weight history?')) { Store.resetAll(); close(); location.reload(); }
       };
+    });
+  }
+
+  /* ---------- Account & Cloud sync settings ---------- */
+  function statusLabel() {
+    const s = App.Cloud.getStatus();
+    return s === 'synced' ? '✅ Synced' : s === 'syncing' ? '↻ Syncing…' : s === 'offline' ? '⚠️ Offline — will sync later' : '';
+  }
+  function renderAccount(host) {
+    const C = App.Cloud;
+    if (!C) { host.innerHTML = ''; return; }
+    if (!C.configured()) {
+      host.innerHTML = `
+        <p class="muted" style="margin:0 0 10px;font-size:12.5px;line-height:1.5">Save your account online and sync across devices. One-time free setup with Firebase (no credit card) — see <b>CLOUD-SETUP.md</b>. Until then everything stays safely on this device.</p>
+        <button class="btn" id="ac-setup">Set up cloud sync</button>`;
+      host.querySelector('#ac-setup').onclick = () => cloudConfigSheet(() => renderAccount(host));
+      return;
+    }
+    if (!C.available()) {
+      host.innerHTML = `<p class="muted" style="margin:0;font-size:12.5px">Connecting to the cloud… if this persists you may be offline, or the config needs fixing. <button class="link" id="ac-edit" style="color:var(--accent)">Edit config</button></p>`;
+      host.querySelector('#ac-edit').onclick = () => cloudConfigSheet(() => renderAccount(host));
+      return;
+    }
+    const u = C.currentUser();
+    if (!u) {
+      host.innerHTML = `
+        ${UI.field('Email', `<input class="input" id="ac-email" type="email" inputmode="email" autocomplete="username" placeholder="you@email.com">`)}
+        ${UI.field('Password', `<input class="input" id="ac-pw" type="password" autocomplete="current-password" placeholder="6+ characters">`)}
+        <div class="btn-row" style="margin-top:0"><button class="btn primary" id="ac-in">Sign in</button><button class="btn" id="ac-up">Create account</button></div>
+        <button class="link" id="ac-edit" style="color:var(--faint);font-size:12px;margin-top:10px">Edit cloud config</button>`;
+      const email = () => host.querySelector('#ac-email').value.trim();
+      const pw = () => host.querySelector('#ac-pw').value;
+      host.querySelector('#ac-in').onclick = async () => {
+        if (!email() || !pw()) return UI.toast('Enter email + password');
+        UI.toast('Signing in…');
+        try { await C.signIn(email(), pw()); UI.toast('Signed in ✅', 'good'); renderAccount(host); }
+        catch (e) { UI.toast(authMsg(e)); }
+      };
+      host.querySelector('#ac-up').onclick = async () => {
+        if (!email() || pw().length < 6) return UI.toast('Email + 6-char password');
+        UI.toast('Creating account…');
+        try { await C.signUp(email(), pw(), Store.profile().name); UI.toast('Account created ✅', 'good'); renderAccount(host); }
+        catch (e) { UI.toast(authMsg(e)); }
+      };
+      host.querySelector('#ac-edit').onclick = () => cloudConfigSheet(() => renderAccount(host));
+      return;
+    }
+    // signed in
+    host.innerHTML = `
+      <p class="muted" style="margin:0 0 8px;font-size:13px">Signed in as <b>${UI.esc(u.email || '')}</b>. <span id="ac-st">${statusLabel()}</span></p>
+      <div class="card" style="margin:0 0 10px;line-height:1.5">
+        <div class="spread"><span class="muted" style="font-size:12px">Your friend code</span><b style="font-family:monospace;letter-spacing:2px;font-size:17px">${UI.esc(C.code() || '······')}</b></div>
+        <p class="muted" style="margin:8px 0 0;font-size:12px">Share this code so friends can add you. No public directory — only people with your code can find you.</p>
+        <button class="btn ghost" id="ac-copy" style="margin-top:10px">📋 Copy my code</button>
+      </div>
+      ${UI.field('Add a friend by code', `<input class="input" id="ac-fc" placeholder="e.g. K7P2QX" style="text-transform:uppercase;letter-spacing:2px;font-family:monospace">`)}
+      <button class="btn" id="ac-add">Add friend</button>
+      <div class="btn-row"><button class="btn ghost" id="ac-sync">↻ Sync now</button><button class="btn ghost danger" id="ac-out">Sign out</button></div>`;
+    host.querySelector('#ac-copy').onclick = async () => {
+      try { await navigator.clipboard.writeText(C.code() || ''); UI.toast('Code copied ✅', 'good'); } catch (e) { UI.toast(C.code() || ''); }
+    };
+    host.querySelector('#ac-add').onclick = async () => {
+      const v = host.querySelector('#ac-fc').value;
+      if (!v.trim()) return UI.toast('Enter their code');
+      UI.toast('Looking up…');
+      try { const name = await C.addByCode(v); UI.toast(name + ' added 🏆', 'good'); host.querySelector('#ac-fc').value = ''; }
+      catch (e) { UI.toast(e.message || 'Not found'); }
+    };
+    host.querySelector('#ac-sync').onclick = async () => { UI.toast('Syncing…'); try { await C.push(); await C.refreshFriends(); UI.toast('Synced ✅', 'good'); } catch (e) { UI.toast('Sync failed'); } };
+    host.querySelector('#ac-out').onclick = async () => { await C.signOut(); UI.toast('Signed out'); renderAccount(host); };
+    // live status updates
+    C.onChange(() => { const el = host.querySelector('#ac-st'); if (el) el.textContent = statusLabel(); });
+  }
+  function authMsg(e) {
+    const c = (e && e.code) || '';
+    if (c.includes('email-already-in-use')) return 'That email already has an account — sign in instead';
+    if (c.includes('invalid-email')) return 'That email looks invalid';
+    if (c.includes('weak-password')) return 'Password needs 6+ characters';
+    if (c.includes('wrong-password') || c.includes('invalid-credential')) return 'Wrong email or password';
+    if (c.includes('user-not-found')) return 'No account with that email';
+    if (c.includes('network')) return 'Network error — check your connection';
+    return (e && e.message) || 'Something went wrong';
+  }
+  function cloudConfigSheet(after) {
+    const C = App.Cloud;
+    const cur = C.getConfig();
+    UI.modal(`
+      <h2>Cloud setup</h2>
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Paste your <b>Firebase web config</b> here (the <code>const firebaseConfig = {…}</code> block from your Firebase project). Full step-by-step is in <b>CLOUD-SETUP.md</b>. This is free and stays online 24/7.</p>
+      <textarea class="input" id="cc-data" placeholder='{ "apiKey": "…", "authDomain": "…", "projectId": "…", "appId": "…" }' style="height:150px;font-size:11px;font-family:monospace">${cur ? UI.esc(JSON.stringify(cur, null, 2)) : ''}</textarea>
+      <button class="btn primary" id="cc-save" style="margin-top:12px">Save & connect</button>
+      ${cur ? `<button class="btn ghost danger" id="cc-clear" style="margin-top:10px">Remove cloud config</button>` : ''}
+    `, (m, close) => {
+      m.querySelector('#cc-save').onclick = async () => {
+        const cfg = C.parseConfig(m.querySelector('#cc-data').value);
+        if (!cfg || !cfg.apiKey || !cfg.projectId || !cfg.appId) return UI.toast('That config is missing apiKey / projectId / appId');
+        C.setConfig(cfg);
+        UI.toast('Connecting…');
+        await C.init();
+        close(); if (after) after();
+      };
+      const clr = m.querySelector('#cc-clear');
+      if (clr) clr.onclick = () => { if (confirm('Remove cloud config? Your local data stays; cloud sync stops until you set it up again.')) { C.clearConfig(); close(); if (after) after(); } };
     });
   }
 
@@ -471,6 +579,7 @@ window.App = window.App || {};
 
     Store.requestPersist();   // ask iOS/Safari to keep our data durable
     if (App.Strava) App.Strava.init();   // complete Strava OAuth redirect if returning
+    if (App.Cloud) App.Cloud.init();     // cloud sync (no-op unless configured)
     Router.go('today');
 
     // Entry: fresh → onboarding; otherwise → "Who's training?" profile picker

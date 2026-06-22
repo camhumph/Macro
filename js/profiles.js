@@ -197,13 +197,31 @@ App.Profiles = (function () {
   }
 
   function addFriend() {
+    const cloud = App.Cloud && App.Cloud.available() && App.Cloud.currentUser();
     UI.modal(`
       <h2>Add a friend</h2>
-      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Paste the <b>invite link</b> a friend sent you (or their profile file). They'll appear on your leaderboard. Looking someone up by name needs a shared server — Macro is fully on-device, so invite links are how you connect.</p>
+      ${cloud ? `
+        <p class="muted" style="margin:-8px 0 10px;font-size:13px">Enter your friend's <b>code</b> to add them online.</p>
+        ${UI.field('Friend code', `<input class="input" id="af-code" placeholder="e.g. K7P2QX" style="text-transform:uppercase;letter-spacing:2px;font-family:monospace">`)}
+        <button class="btn primary" id="af-bycode">Add by code</button>
+        <div class="divider"></div>
+        <p class="muted" style="margin:0 0 10px;font-size:12.5px">Or paste an invite link / profile file:</p>
+      ` : `
+        <p class="muted" style="margin:-8px 0 12px;font-size:13px">Paste the <b>invite link</b> a friend sent you (or their profile file). They'll appear on your leaderboard.</p>
+      `}
       <textarea class="input" id="af-data" placeholder="Paste their Macro invite link here" style="height:78px;font-size:11px;font-family:monospace"></textarea>
       <input type="file" id="af-file" accept="application/json,.json,text/plain" class="input" style="padding:10px;margin-top:10px">
-      <button class="btn primary" id="af-go" style="margin-top:12px">Add to leaderboard</button>
+      <button class="btn ${cloud ? '' : 'primary'}" id="af-go" style="margin-top:12px">Add to leaderboard</button>
     `, (m, close) => {
+      if (cloud) {
+        m.querySelector('#af-bycode').onclick = async () => {
+          const v = m.querySelector('#af-code').value;
+          if (!v.trim()) return UI.toast('Enter their code');
+          UI.toast('Looking up…');
+          try { const name = await App.Cloud.addByCode(v); close(); App.Router.refresh(); UI.toast(name + ' added 🏆', 'good'); }
+          catch (e) { UI.toast(e.message || 'Not found'); }
+        };
+      }
       const ta = m.querySelector('#af-data');
       m.querySelector('#af-file').onchange = (e) => {
         const f = e.target.files && e.target.files[0]; if (!f) return;

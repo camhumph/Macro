@@ -1,11 +1,11 @@
 /* Macro — service worker: offline cache (cache-first for app shell) */
-const CACHE = 'macro-v19';
+const CACHE = 'macro-v20';
 const ASSETS = [
   './', './index.html', './styles.css', './manifest.json',
   './js/data.js', './js/store.js', './js/adaptive.js', './js/goals.js', './js/running.js', './js/workload.js',
   './js/coach.js', './js/strava.js', './js/ui.js', './js/timer.js', './js/workout.js',
   './js/food.js', './js/scan.js', './js/barcode.js', './js/weight.js', './js/reminders.js',
-  './js/leaderboard.js', './js/profiles.js', './js/stats.js', './js/app.js',
+  './js/leaderboard.js', './js/profiles.js', './js/cloud.js', './js/stats.js', './js/app.js',
   './icons/icon.svg'
 ];
 

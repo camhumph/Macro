@@ -94,12 +94,47 @@ App.Store = (function () {
   }
 
   function save() {
+    if (state) state._u = Date.now();        // local-modification time (cloud conflict resolution)
     try { localStorage.setItem(APP_KEY, JSON.stringify(container)); }
     catch (e) { console.warn('save failed', e); }
+    if (saveHook) { try { saveHook(); } catch (e) {} }
   }
+  let saveHook = null;
+  function onSave(fn) { saveHook = fn; }   // Cloud uses this to push changes
 
   function get() { return state; }
   function profile() { return state.profile; }
+
+  /* ---------- cloud merge: union remote into the active profile ----------
+     Logs (date-keyed maps + arrays) are unioned so nothing is lost across
+     devices; the active device wins per-key collisions. Profile settings come
+     from whichever side was modified more recently (_u). */
+  function cloudMerge(remote) {
+    if (!remote || !state) return false;
+    const mapFields = ['workoutLogs', 'foodLogs', 'water', 'exerciseLogs', 'dayChoices', 'programOverrides'];
+    mapFields.forEach(f => {
+      const r = remote[f] || {}; state[f] = state[f] || {};
+      Object.keys(r).forEach(k => { if (!(k in state[f])) state[f][k] = r[k]; });
+    });
+    // weightLogs: union by date, local wins, re-sort
+    const byDate = {};
+    (remote.weightLogs || []).forEach(w => { byDate[w.date] = w; });
+    (state.weightLogs || []).forEach(w => { byDate[w.date] = w; });
+    state.weightLogs = Object.values(byDate).sort((a, b) => a.date < b.date ? -1 : 1);
+    // id-keyed arrays: union by id, local wins
+    ['meals', 'routines', 'pantry'].forEach(f => {
+      const seen = {};
+      (remote[f] || []).forEach(x => { if (x && x.id != null) seen[x.id] = x; });
+      (state[f] || []).forEach(x => { if (x && x.id != null) seen[x.id] = x; });
+      state[f] = Object.values(seen);
+    });
+    // profile settings: newer modification wins
+    if (remote.profile && (remote._u || 0) > (state._u || 0)) {
+      Object.assign(state.profile, remote.profile);
+    }
+    save();
+    return true;
+  }
 
   function setProfile(patch) { Object.assign(state.profile, patch); save(); }
 
@@ -138,6 +173,15 @@ App.Store = (function () {
     const st = mergeProfile(obj); st.onboarded = true;
     const id = 'p' + Date.now();
     container.profiles[id] = st; container.order.push(id); save();
+    return id;
+  }
+  // Add or update a friend (cloud lookups). Re-adding the same code updates in
+  // place instead of duplicating. Friend profiles are tagged with _friendCode.
+  function upsertFriend(code, obj) {
+    const st = mergeProfile(obj); st.onboarded = true; st._friendCode = code;
+    let id = container.order.find(pid => container.profiles[pid] && container.profiles[pid]._friendCode === code);
+    if (!id) { id = 'pf' + Date.now() + Math.floor(Math.random() * 1000); container.order.push(id); }
+    container.profiles[id] = st; save();
     return id;
   }
   // [{ id, meta:{name,emoji,color}, state }] for leaderboard computation
@@ -369,7 +413,7 @@ App.Store = (function () {
 
   return {
     KEY, APP_KEY, AVATARS, COLORS, todayKey, get, save, profile, setProfile,
-    profiles, activeId, switchProfile, createProfile, updateProfileMeta, deleteProfile, importAsNewProfile, allProfilesData,
+    profiles, activeId, switchProfile, createProfile, updateProfileMeta, deleteProfile, importAsNewProfile, upsertFriend, allProfilesData,
     weekFor, daysUntilTarget, daysIntoProgram, dayDiff,
     logWeight, weightToday, latestWeight,
     foodLog, addFood, updateFood, removeFood, dayTotals,
@@ -381,6 +425,7 @@ App.Store = (function () {
     getDayChoice, setDayChoice, clearDayChoice, trainingDates,
     importState, requestPersist,
     workoutLog, saveWorkout, exerciseHistory,
+    onSave, cloudMerge,
     resetAll,
   };
 })();
