@@ -8,6 +8,7 @@ App.Food = (function () {
   const Store = App.Store, UI = App.UI;
 
   const MEALS = ['Breakfast','Lunch','Dinner','Snacks'];
+  const MEAL_EMOJI = ['🍱','🍳','🥗','🍗','🥪','🍝','🥩','🍚','🥤','🍎','🌮','🍲'];
   const barcodeIco = `<svg width="16" height="16" viewBox="0 0 24 24" style="fill:currentColor;vertical-align:-2px"><path d="M2 5h2v14H2V5Zm3 0h1v14H5V5Zm2 0h2v14H7V5Zm3 0h1v14h-1V5Zm3 0h2v14h-2V5Zm3 0h1v14h-1V5Zm2 0h3v14h-3V5Z"/></svg>`;
 
   function mealOf(entry) { return entry.meal || 'Snacks'; }
@@ -76,7 +77,7 @@ App.Food = (function () {
       if (!items.length) return '';
       const mt = items.reduce((s,e)=>s+(e.cal||0),0);
       return `
-        <div class="meal-head"><b>${m}</b><span>${UI.round(mt)} cal</span></div>
+        <div class="meal-head"><b>${m}</b><span style="display:flex;align-items:center;gap:12px">${UI.round(mt)} cal <button class="link" data-savesec="${m}" style="color:var(--accent);font-size:12px;font-weight:700">💾 Save</button></span></div>
         <div class="card" style="padding:6px 16px">
           ${items.map(foodItemRow).join('')}
         </div>`;
@@ -105,6 +106,10 @@ App.Food = (function () {
     container.querySelectorAll('[data-mealdel]').forEach(b => b.onclick = (e) => { e.stopPropagation(); Store.removeMeal(b.dataset.mealdel); page(container); });
     const sm = container.querySelector('#food-savemeal');
     if (sm) sm.onclick = () => saveMealSheet(container);
+    container.querySelectorAll('[data-savesec]').forEach(b => b.onclick = () => {
+      const sec = b.dataset.savesec;
+      saveMealSheet(container, Store.foodLog().filter(e => mealOf(e) === sec), sec);
+    });
     App.Scan.wirePantry(container);
     container.querySelectorAll('[data-edit]').forEach(el => el.onclick = () => editEntrySheet(el.dataset.edit));
     container.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
@@ -199,20 +204,41 @@ App.Food = (function () {
     const h = new Date().getHours();
     return h < 11 ? 'Breakfast' : h < 15 ? 'Lunch' : h < 21 ? 'Dinner' : 'Snacks';
   }
-  function saveMealSheet(container) {
-    const items = Store.foodLog();
+  // Save a reusable meal. Optional `preset` items (e.g. one meal section) and a
+  // suggested name; otherwise the whole day's log. You tick which foods to keep.
+  function saveMealSheet(container, preset, presetName) {
+    const items = (preset && preset.length) ? preset : Store.foodLog();
     if (!items.length) return UI.toast('Log some foods first');
+    const sel = new Set(items.map((_, i) => i));
+    const pick = { emoji: MEAL_EMOJI[0] };
+    const suggest = presetName || (items.length === 1 ? items[0].name : `${mealSlot()} meal`);
     UI.modal(`
       <h2>Save as a meal</h2>
-      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Saves today's ${items.length} logged foods as a reusable meal you can add in one tap.</p>
-      ${UI.field('Meal name', `<input class="input" id="sm-name" placeholder="e.g. My usual breakfast">`)}
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Tick what to include, then add the whole meal any day in one tap.</p>
+      ${UI.field('Meal name', `<input class="input" id="sm-name" value="${UI.esc(suggest)}" placeholder="e.g. My usual breakfast">`)}
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Icon</label>
+      <div class="av-grid" id="sm-emoji" style="margin-bottom:14px">${MEAL_EMOJI.map(e => `<button type="button" class="av-pick ${e === pick.emoji ? 'on' : ''}" data-e="${e}">${e}</button>`).join('')}</div>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Foods</label>
+      <div class="card" style="padding:6px 16px;margin-bottom:14px">
+        ${items.map((e, i) => `<div class="food-item sm-row on" data-i="${i}">
+          <div class="fi-main"><b>${UI.esc(e.name)}</b><small>${UI.esc(e.qtyLabel || '')} · ${UI.round(e.cal)} cal</small></div>
+          <div class="sm-check">✓</div>
+        </div>`).join('')}
+      </div>
       <button class="btn primary" id="sm-go">Save meal</button>
     `, (m, close) => {
+      m.querySelectorAll('#sm-emoji .av-pick').forEach(b => b.onclick = () => { pick.emoji = b.dataset.e; m.querySelectorAll('#sm-emoji .av-pick').forEach(x => x.classList.toggle('on', x === b)); });
+      m.querySelectorAll('.sm-row').forEach(r => r.onclick = () => {
+        const i = +r.dataset.i;
+        if (sel.has(i)) { sel.delete(i); r.classList.remove('on'); } else { sel.add(i); r.classList.add('on'); }
+      });
       m.querySelector('#sm-go').onclick = () => {
         const name = m.querySelector('#sm-name').value.trim();
         if (!name) return UI.toast('Name it first');
-        Store.addMeal(name, items.map(e => ({ name:e.name, emoji:e.emoji, qtyLabel:e.qtyLabel, cal:e.cal, protein:e.protein, carbs:e.carbs, fat:e.fat })));
-        close(); page(container); UI.toast('Meal saved', 'good');
+        const chosen = items.filter((_, i) => sel.has(i));
+        if (!chosen.length) return UI.toast('Pick at least one food');
+        Store.addMeal(name, chosen.map(e => ({ name:e.name, emoji:e.emoji, qtyLabel:e.qtyLabel, cal:e.cal, protein:e.protein, carbs:e.carbs, fat:e.fat })), pick.emoji);
+        close(); page(container); UI.toast('Meal saved ✅', 'good');
       };
     });
   }
