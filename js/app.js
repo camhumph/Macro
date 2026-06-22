@@ -478,6 +478,9 @@ window.App = window.App || {};
     if (!anyOnboarded) { App.Reminders.start(); onboard(); }
     else { App.Profiles.launchSelector(); }
 
+    // Friend invite link (#friend=…) → offer to add them to the leaderboard.
+    App.Profiles.consumeInvite();
+
     // service worker (offline + installable)
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});

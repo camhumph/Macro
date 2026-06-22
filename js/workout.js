@@ -779,7 +779,9 @@ App.Workout = (function () {
   }
   function estimatedLifts() {
     const out = [];
-    Object.values(DATA.E).forEach(ex => {
+    // Every selectable strength movement the user has logged (not just the core E set).
+    Object.values(DATA.ALL).forEach(ex => {
+      if (ex.type === 'cond' || ex.cat === 'Cardio') return;
       const b = best1RM(ex.key); if (!b) return;
       out.push({ key: ex.key, name: ex.name, oneRM: b.oneRM,
         e5: weightForReps(b.oneRM, 5), e8: weightForReps(b.oneRM, 8), e10: weightForReps(b.oneRM, 10), e12: weightForReps(b.oneRM, 12), from: b.from });

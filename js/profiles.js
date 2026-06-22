@@ -138,24 +138,60 @@ App.Profiles = (function () {
     else UI.toast(url);
   }
 
+  /* ---------- friend invites (encode a profile into a shareable link) ---------- */
+  // UTF-8-safe base64 so names/emoji survive the round-trip through a URL.
+  function b64e(s) { return btoa(unescape(encodeURIComponent(s))); }
+  function b64d(s) { return decodeURIComponent(escape(atob(s))); }
+
+  // Slim payload for a friend's leaderboard: identity + training history only.
+  // Food diary, water, pantry, reminders etc. stay private and off the link.
+  function friendPayload() {
+    const st = Store.get(), p = st.profile;
+    return {
+      onboarded: true,
+      profile: {
+        name: p.name, emoji: p.emoji, color: p.color, sex: p.sex,
+        startWeight: p.startWeight, targetWeight: p.targetWeight, goalWeight: p.goalWeight,
+        goals: p.goals, startDate: p.startDate,
+      },
+      workoutLogs: st.workoutLogs || {},
+      weightLogs: st.weightLogs || [],
+    };
+  }
+  function friendLink() {
+    return location.href.split('#')[0] + '#friend=' + b64e(JSON.stringify(friendPayload()));
+  }
+  // Pull a friend payload out of whatever the user pasted: a Macro link, a raw
+  // base64 token, or full profile JSON. Returns the parsed object or null.
+  function parseFriendInput(raw) {
+    raw = (raw || '').trim(); if (!raw) return null;
+    const hashIdx = raw.indexOf('#friend=');
+    if (hashIdx !== -1) raw = raw.slice(hashIdx + 8);
+    // try base64 token first
+    try { const o = JSON.parse(b64d(raw)); if (o && o.profile) return o; } catch (e) {}
+    // fall back to raw JSON
+    try { const o = JSON.parse(raw); if (o && o.profile) return o; } catch (e) {}
+    return null;
+  }
+
   function shareProfile() {
     const st = Store.get();
     const m = LB.metrics(st), lv = LB.levelOf(st);
-    const json = JSON.stringify(st);
-    const summary = `${st.profile.name} on Macro — Level ${lv.level}, ${m.sessions} sessions, ${m.gymStreak}-day streak, ${m.strength} lb total strength. Add me to compare.`;
+    const link = friendLink();
+    const summary = `${st.profile.name} on Macro — Level ${lv.level}, ${m.sessions} sessions, ${m.gymStreak}-day streak, ${m.strength} lb total strength. Tap to add me:`;
     UI.modal(`
-      <h2>Share your profile</h2>
-      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Send this to a friend — they tap <b>“+ Add friend”</b> and paste it to put you on their leaderboard.</p>
+      <h2>Add me on Macro</h2>
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Send this link to a friend. When they open it on their phone, Macro asks them to add you to their leaderboard. There's no central server, so a link (or QR / AirDrop) is how friends connect.</p>
       <div class="card" style="line-height:1.5">${UI.esc(summary)}</div>
-      <textarea class="input" id="sp-data" readonly style="height:100px;font-size:11px;font-family:monospace;margin-top:12px">${UI.esc(json)}</textarea>
-      <div class="btn-row"><button class="btn primary" id="sp-copy">📋 Copy</button><button class="btn" id="sp-share">Share…</button></div>
+      <textarea class="input" id="sp-link" readonly style="height:78px;font-size:11px;font-family:monospace;margin-top:12px">${UI.esc(link)}</textarea>
+      <div class="btn-row"><button class="btn primary" id="sp-copy">🔗 Copy link</button><button class="btn" id="sp-share">Share…</button></div>
     `, (mo) => {
       mo.querySelector('#sp-copy').onclick = async () => {
-        try { await navigator.clipboard.writeText(json); UI.toast('Copied ✅', 'good'); }
-        catch (e) { const t = mo.querySelector('#sp-data'); t.focus(); t.select(); UI.toast('Select all & copy'); }
+        try { await navigator.clipboard.writeText(link); UI.toast('Link copied ✅', 'good'); }
+        catch (e) { const t = mo.querySelector('#sp-link'); t.focus(); t.select(); UI.toast('Select all & copy'); }
       };
       const sh = mo.querySelector('#sp-share');
-      if (navigator.share) sh.onclick = () => navigator.share({ title: 'My Macro profile', text: summary + '\n\n' + json }).catch(() => {});
+      if (navigator.share) sh.onclick = () => navigator.share({ title: 'Add me on Macro', text: summary + '\n\n' + link }).catch(() => {});
       else sh.style.display = 'none';
     });
   }
@@ -163,9 +199,9 @@ App.Profiles = (function () {
   function addFriend() {
     UI.modal(`
       <h2>Add a friend</h2>
-      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Paste the profile they shared (or pick a file). They'll appear on your leaderboard.</p>
-      <input type="file" id="af-file" accept="application/json,.json,text/plain" class="input" style="padding:10px">
-      <textarea class="input" id="af-data" placeholder="…or paste their profile text" style="height:100px;font-size:11px;font-family:monospace;margin-top:12px"></textarea>
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Paste the <b>invite link</b> a friend sent you (or their profile file). They'll appear on your leaderboard. Looking someone up by name needs a shared server — Macro is fully on-device, so invite links are how you connect.</p>
+      <textarea class="input" id="af-data" placeholder="Paste their Macro invite link here" style="height:78px;font-size:11px;font-family:monospace"></textarea>
+      <input type="file" id="af-file" accept="application/json,.json,text/plain" class="input" style="padding:10px;margin-top:10px">
       <button class="btn primary" id="af-go" style="margin-top:12px">Add to leaderboard</button>
     `, (m, close) => {
       const ta = m.querySelector('#af-data');
@@ -174,14 +210,33 @@ App.Profiles = (function () {
         const r = new FileReader(); r.onload = () => { ta.value = r.result; UI.toast('Loaded — tap Add'); }; r.readAsText(f);
       };
       m.querySelector('#af-go').onclick = () => {
-        const raw = ta.value.trim(); if (!raw) return UI.toast('Paste a profile');
-        let obj; try { obj = JSON.parse(raw); } catch (e) { return UI.toast('Invalid profile text'); }
-        if (!obj.profile) return UI.toast('That isn\'t a Macro profile');
+        const obj = parseFriendInput(ta.value);
+        if (!obj) return UI.toast('That isn\'t a valid Macro invite');
         Store.importAsNewProfile(obj);
         close(); App.Router.refresh(); UI.toast((obj.profile.name || 'Friend') + ' added 🏆', 'good');
       };
     });
   }
 
-  return { launchSelector, switcher, newProfile, editProfile, shareApp, shareProfile, addFriend };
+  // On launch, if the URL carries a #friend= invite, offer to add them.
+  function consumeInvite() {
+    const h = location.hash || '';
+    if (h.indexOf('#friend=') !== 0 && h.indexOf('friend=') === -1) return false;
+    const obj = parseFriendInput(h);
+    // Clear the hash so a refresh doesn't re-prompt.
+    try { history.replaceState(null, '', location.href.split('#')[0]); } catch (e) { location.hash = ''; }
+    if (!obj) return false;
+    const name = obj.profile.name || 'A friend';
+    UI.modal(`
+      <h2>Friend invite</h2>
+      <p style="margin:-6px 0 14px;line-height:1.5"><b>${UI.esc(name)}</b> shared their Macro profile. Add them to your leaderboard so you can compare progress?</p>
+      <div class="btn-row"><button class="btn primary" id="iv-add">Add ${UI.esc(name)}</button><button class="btn ghost" id="iv-no">Not now</button></div>
+    `, (m, close) => {
+      m.querySelector('#iv-add').onclick = () => { Store.importAsNewProfile(obj); close(); UI.toast(name + ' added 🏆', 'good'); if (App.Router) App.Router.refresh(); };
+      m.querySelector('#iv-no').onclick = close;
+    });
+    return true;
+  }
+
+  return { launchSelector, switcher, newProfile, editProfile, shareApp, shareProfile, addFriend, friendLink, consumeInvite };
 })();

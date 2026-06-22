@@ -38,26 +38,73 @@ App.Stats = (function () {
 
   /* ---------- strength standards (1RM / bodyweight) → rank ---------- */
   const RANKS = ['Untrained', 'Beginner', 'Novice', 'Intermediate', 'Advanced', 'Elite'];
-  // male thresholds (1RM ÷ bodyweight) for Beginner..Elite
+  // Male thresholds = estimated 1RM ÷ bodyweight for Beginner..Elite, per exercise.
+  // Drawn from strength-standards norms (Symmetric Strength / ExRx style). Women
+  // are scaled to ~0.72× of these (see rankFor). Every logged lift gets a rank —
+  // not just the big compounds.
   const STD = {
-    bench:   [0.5, 0.75, 1.0, 1.5, 2.0],
-    incline: [0.4, 0.6, 0.85, 1.25, 1.7],
-    squat:   [0.75, 1.25, 1.5, 2.0, 2.75],
-    front:   [0.6, 1.0, 1.3, 1.75, 2.3],
-    ohp:     [0.35, 0.55, 0.8, 1.1, 1.5],
-    row:     [0.5, 0.7, 0.95, 1.25, 1.6],
-    rdl:     [1.0, 1.4, 1.75, 2.25, 2.75],
+    // ---- Chest ----
+    flatBench:   [0.50, 0.75, 1.00, 1.50, 2.00],
+    inclineBB:   [0.40, 0.60, 0.85, 1.25, 1.70],
+    dbBench:     [0.20, 0.30, 0.45, 0.60, 0.80],   // per dumbbell
+    inclineDB:   [0.175, 0.275, 0.40, 0.55, 0.70], // per dumbbell
+    weightedDip: [0.00, 0.15, 0.40, 0.75, 1.15],   // added load ÷ bw
+    cableFly:    [0.10, 0.18, 0.28, 0.40, 0.55],
+    // ---- Shoulders ----
+    ohp:         [0.35, 0.55, 0.80, 1.10, 1.50],
+    dbOHP:       [0.15, 0.225, 0.325, 0.45, 0.60], // per dumbbell
+    lateral:     [0.05, 0.09, 0.14, 0.20, 0.28],   // per dumbbell
+    cableLat:    [0.05, 0.09, 0.14, 0.20, 0.28],
+    facepull:    [0.10, 0.18, 0.28, 0.40, 0.55],
+    rearDelt:    [0.05, 0.09, 0.14, 0.20, 0.28],
+    // ---- Back ----
+    pullup:      [0.00, 0.10, 0.30, 0.60, 1.00],   // added load ÷ bw
+    latPull:     [0.45, 0.65, 0.90, 1.20, 1.55],
+    bbRow:       [0.50, 0.70, 0.95, 1.25, 1.60],
+    csRow:       [0.40, 0.60, 0.85, 1.15, 1.50],
+    tbar:        [0.50, 0.70, 0.95, 1.25, 1.60],
+    seatedRow:   [0.45, 0.65, 0.90, 1.20, 1.55],
+    // ---- Arms ----
+    bbCurl:      [0.25, 0.40, 0.55, 0.75, 0.95],
+    inclineCurl: [0.10, 0.16, 0.24, 0.34, 0.45],   // per dumbbell
+    hammerCurl:  [0.12, 0.18, 0.27, 0.38, 0.50],   // per dumbbell
+    preacher:    [0.20, 0.32, 0.45, 0.62, 0.80],
+    pushdown:    [0.25, 0.40, 0.60, 0.85, 1.15],
+    ropePush:    [0.25, 0.40, 0.60, 0.85, 1.15],
+    skull:       [0.25, 0.40, 0.55, 0.75, 0.95],
+    // ---- Legs ----
+    squat:       [0.75, 1.25, 1.50, 2.00, 2.75],
+    frontSquat:  [0.60, 1.00, 1.30, 1.75, 2.30],
+    rdl:         [0.75, 1.25, 1.60, 2.10, 2.60],
+    deadlift:    [1.00, 1.50, 2.00, 2.50, 3.00],
+    legPress:    [1.50, 2.50, 3.25, 4.50, 6.00],
+    hackSquat:   [1.00, 1.50, 2.00, 2.75, 3.50],
+    bulgarian:   [0.25, 0.45, 0.65, 0.90, 1.20],   // per dumbbell
+    walkLunge:   [0.25, 0.45, 0.65, 0.90, 1.20],   // per dumbbell
+    legCurl:     [0.30, 0.50, 0.70, 0.95, 1.25],
+    legExt:      [0.45, 0.70, 1.00, 1.35, 1.75],
+    hipThrust:   [1.00, 1.50, 2.00, 2.75, 3.50],
+    calfStand:   [0.75, 1.25, 1.75, 2.50, 3.25],
+    calfSeat:    [0.50, 0.85, 1.25, 1.75, 2.30],
   };
-  const STD_OF = { flatBench:'bench', inclineBB:'incline', squat:'squat', frontSquat:'front', ohp:'ohp', bbRow:'row', rdl:'rdl' };
+  // Exercises whose standard is *added* load relative to bodyweight, not total bar.
+  const ADDED = new Set(['pullup', 'weightedDip']);
+  // Exercises loaded per dumbbell (one hand) rather than total.
+  const PERDB = new Set(['dbBench', 'inclineDB', 'dbOHP', 'lateral', 'cableLat', 'rearDelt', 'inclineCurl', 'hammerCurl', 'bulgarian', 'walkLunge']);
+  function ratioLabel(key) {
+    if (ADDED.has(key)) return '× bw added';
+    if (PERDB.has(key)) return '× bw / dumbbell';
+    return '× bodyweight';
+  }
   function rankFor(key, oneRM) {
-    const s = STD[STD_OF[key]]; if (!s) return null;
+    const s = STD[key]; if (!s) return null;
     const bw = Store.latestWeight() || 1;
     const female = Store.profile().sex === 'female';
     const ratio = oneRM / bw;
     let idx = 0;
     s.forEach((th, i) => { const t = female ? th * 0.72 : th; if (ratio >= t) idx = i + 1; });
     const next = idx < 5 ? (female ? s[idx] * 0.72 : s[idx]) : null;
-    return { name: RANKS[idx], idx, ratio, nextRatio: next };
+    return { name: RANKS[idx], idx, ratio, nextRatio: next, label: ratioLabel(key) };
   }
 
   /* ---------- Strength: estimated 1RM table ---------- */
@@ -78,7 +125,7 @@ App.Stats = (function () {
             <div class="pill accent">${UI.round(l.oneRM)} lb 1RM</div>
           </div>
           ${rk ? `<div class="rank-bar">
-            <div class="spread" style="margin-bottom:6px"><span class="rank-chip rk${rk.idx}">${rk.name}</span><span class="muted" style="font-size:12px">${(rk.ratio).toFixed(2)}× bodyweight</span></div>
+            <div class="spread" style="margin-bottom:6px"><span class="rank-chip rk${rk.idx}">${rk.name}</span><span class="muted" style="font-size:12px">${(rk.ratio).toFixed(2)}${rk.label}</span></div>
             <div class="bar-track"><div class="bar-fill" style="width:${UI.clamp(rk.idx/5*100,4,100)}%;background:var(--accent)"></div></div>
             ${rk.nextRatio ? `<div class="last-hint">${UI.round(rk.nextRatio*(Store.latestWeight()||1))} lb 1RM for ${RANKS[rk.idx+1]}</div>` : `<div class="last-hint suggest">Elite — top tier 💪</div>`}
           </div>` : ''}
