@@ -259,7 +259,7 @@ App.Workout = (function () {
         </div>
       </div>
       <h2 style="margin:4px 2px 10px;font-size:21px;letter-spacing:-.4px">${UI.esc(current.dayName)}</h2>
-      ${editMode ? '' : '<button class="btn ghost small" id="wk-plates" style="margin-bottom:12px">🏋️ Plate calculator</button>'}
+      ${editMode ? '' : `<div class="btn-row" style="margin-bottom:12px"><button class="btn ghost small" id="wk-plates">🏋️ Plates</button><button class="btn ghost small" id="wk-shuffle">🎲 Shuffle workout</button></div>`}
     `;
 
     if (editMode) html += recoBanner();
@@ -560,6 +560,8 @@ App.Workout = (function () {
     });
     container.querySelectorAll('[data-quickadd]').forEach(b => b.addEventListener('click', () => quickAdd(b.dataset.quickadd, container)));
     container.querySelectorAll('[data-swapex]').forEach(b => b.addEventListener('click', () => swapSheet(+b.dataset.swapex, container)));
+    const shuf = container.querySelector('#wk-shuffle');
+    if (shuf) shuf.addEventListener('click', () => shuffleSession(container));
   }
 
   // Add a weak-point accessory to this day (sticks for future sessions of this type).
@@ -793,12 +795,55 @@ App.Workout = (function () {
       <p class="muted" style="margin:-8px 0 12px;font-size:13px">Alternatives that train the same muscle. Your sets, reps and progress target carry over.</p>
       <div class="meal-head"><b>Suggested swaps</b><span></span></div>
       ${sugg.length ? sugg.map(row).join('') : '<p class="muted" style="padding:10px 4px">No close matches — browse the full library.</p>'}
-      <button class="btn ghost" id="sw-lib" style="margin-top:12px">Browse full library ▸</button>
+      <button class="btn ghost" id="sw-rand" style="margin-top:12px">🎲 Shuffle this one</button>
+      <button class="btn ghost" id="sw-lib" style="margin-top:10px">Browse full library ▸</button>
     `, (m, close) => {
+      m.querySelector('#sw-rand').onclick = () => { close(); shuffleOne(i, c); };
       m.querySelectorAll('[data-swapkey]').forEach(el => el.onclick = () => { const def = DATA.ALL[el.dataset.swapkey]; close(); swapExercise(i, def, c); });
       m.querySelector('#sw-lib').onclick = () => { close(); picker('swap', i, c); };
     });
   }
+
+  /* ---------- shuffle (random re-roll, this session only — not pinned) ---------- */
+  // A different variant from the pool (or a same-muscle suggestion), avoiding
+  // anything already in today's session.
+  function rerollKey(curKey, used, ex) {
+    const pool = POOL_OF[curKey];
+    let opts = pool ? pool.filter(k => k !== curKey && !used.has(k)) : [];
+    if (!opts.length && ex) opts = suggestSwaps(ex).filter(k => !used.has(k));
+    return opts.length ? opts[Math.floor(Math.random() * opts.length)] : null;
+  }
+  // Swap in a new exercise for THIS session without pinning it as the day's
+  // override — so automatic per-session variation keeps working next time.
+  function replaceForToday(i, key) {
+    const old = current.exercises[i];
+    current.exercises[i] = makeInstance(Object.assign({}, DATA.ALL[key], { sets: old.sets.length }), current.bias);
+  }
+  function shuffleOne(i, c) {
+    const ex = current.exercises[i];
+    if (ex.sets.some(s => s.done)) return UI.toast('Already logged — use ⇄ to swap');
+    const used = new Set(current.exercises.map(e => e.key));
+    const key = rerollKey(ex.key, used, ex);
+    if (!key) return UI.toast('No alternative found for that one');
+    replaceForToday(i, key);
+    rebalance(); persist(); render(c, current.dateKey);
+    UI.toast('🎲 Swapped in ' + DATA.ALL[key].name, 'good');
+  }
+  function shuffleSession(c) {
+    const used = new Set(current.exercises.map(e => e.key));
+    let changed = 0;
+    current.exercises.forEach((ex, idx) => {
+      if (ex.type !== 'acc' || ex.sets.some(s => s.done)) return;   // keep anchors & logged work
+      const key = rerollKey(ex.key, used);
+      if (!key) return;
+      used.delete(ex.key); used.add(key);
+      replaceForToday(idx, key); changed++;
+    });
+    if (!changed) return UI.toast('Nothing to shuffle — accessories are logged or fixed');
+    rebalance(); persist(); render(c, current.dateKey);
+    UI.toast('🎲 Shuffled ' + changed + ' exercise' + (changed > 1 ? 's' : ''), 'good');
+  }
+
   function customExercise(onPick) {
     UI.modal(`
       <h2>Custom exercise</h2>
