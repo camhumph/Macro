@@ -179,6 +179,10 @@ window.App = window.App || {};
         <div class="switch ${p.intensityTech?'on':''}" id="s-itech"></div>
       </div>
       <div class="list-row">
+        <div class="lr-l"><b>Fresh variation each session</b><small>Rotate accessory exercises; keep heavy compounds for progressive overload</small></div>
+        <div class="switch ${p.varyWorkouts!==false?'on':''}" id="s-vary"></div>
+      </div>
+      <div class="list-row">
         <div class="lr-l"><b>Rest timer</b><small>Auto-start between sets</small></div>
         <div class="switch ${p.restTimerOn?'on':''}" id="s-rt"></div>
       </div>
@@ -215,6 +219,7 @@ window.App = window.App || {};
       const flex = m.querySelector('#s-flex'); flex.onclick = () => flex.classList.toggle('on');
       const rt = m.querySelector('#s-rt'); rt.onclick = () => rt.classList.toggle('on');
       const itech = m.querySelector('#s-itech'); itech.onclick = () => itech.classList.toggle('on');
+      const vary = m.querySelector('#s-vary'); vary.onclick = () => vary.classList.toggle('on');
       const custom = m.querySelector('#s-custom');
       custom.onclick = () => { custom.classList.toggle('on'); m.querySelector('#s-macros').classList.toggle('hidden', !custom.classList.contains('on')); };
 
@@ -257,6 +262,7 @@ window.App = window.App || {};
           scheduleMode: flex.classList.contains('on') ? 'flexible' : 'fixed',
           restTimerOn: rt.classList.contains('on'),
           intensityTech: itech.classList.contains('on'),
+          varyWorkouts: vary.classList.contains('on'),
           restTimer: +m.querySelector('#s-rtsec').value || 120,
           waterGoal: +m.querySelector('#s-water').value || 8,
           targetDate: m.querySelector('#s-target').value || '',

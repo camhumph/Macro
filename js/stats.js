@@ -236,6 +236,20 @@ App.Stats = (function () {
     run();
   }
 
+  // Lagging-muscle summary for the Plan view.
+  function weakCard() {
+    const ws = (App.Workout.weakSpots && App.Workout.weakSpots()) || [];
+    if (!ws.length) return '';
+    return `<div class="card" style="margin-top:14px;line-height:1.5">
+      <b>🎯 Bring up your weak points</b>
+      <p class="muted" style="margin:6px 0 10px;font-size:12.5px">Muscles under ~10 hard sets/week over the last 3 weeks (direct + ½ synergist). Add a couple of sets where you're light — you can do it in one tap from today's session.</p>
+      ${ws.slice(0, 3).map(w => {
+        const names = (w.suggest || []).map(k => (DATA.ALL[k] || {}).name).filter(Boolean).slice(0, 2).join(' or ');
+        return `<div class="list-row" style="padding:8px 0"><div class="lr-l"><b style="text-transform:capitalize">${UI.esc(w.muscle)}</b><small>~${w.sets} sets/wk · try ${UI.esc(names)}</small></div><span class="pill accent">+${Math.ceil(w.deficit)} sets</span></div>`;
+      }).join('')}
+    </div>`;
+  }
+
   /* ---------- Plan: goals, nutrition, weight goal, split ---------- */
   function program(body) {
     const G = App.Goals;
@@ -259,6 +273,7 @@ App.Stats = (function () {
     body.innerHTML = `
       ${G.planSummary(pl)}
       ${App.Workload.card()}
+      ${weakCard()}
       <div style="margin-top:14px">${G.guideCard(pl)}</div>
 
       <div class="card" style="margin-top:14px;line-height:1.5">
@@ -272,8 +287,9 @@ App.Stats = (function () {
         <b>How it's programmed</b>
         <ul class="guide-list">
           <li>Volume target: <b>${volTarget}</b>; cap ~6–8 hard sets per muscle in any one session to avoid junk volume.</li>
-          <li>Big multi-joint lifts go first, while you're fresh, for the most strength carryover.</li>
-          <li>Antagonist movements are paired into supersets to save time and lift output.</li>
+          <li>Big multi-joint lifts go first, while you're fresh, run as straight sets with full rest.</li>
+          <li>Only antagonist <b>isolations</b> superset — heavy compounds are never paired back-to-back.</li>
+          <li>Accessories rotate variants each session for fresh stimulus; the heavy anchors stay so you can progressively overload them.</li>
           <li>Stretch-focused exercises load the muscle at long lengths; add lengthened partials past failure where flagged.</li>
           <li>Train each muscle ~2× per week and progress weight or reps when you hit the top of the range.</li>
         </ul>

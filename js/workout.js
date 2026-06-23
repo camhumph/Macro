@@ -19,28 +19,59 @@ App.Workout = (function () {
     return type === 'acc' ? Math.max(2.5, base / 2) : base;
   }
 
+  // Conservative first-attempt working weights (lb) for un-anchored lifts that
+  // can't be derived from your other lifts. The coach starts you light to build up.
+  const START_DEFAULTS = {
+    lateral:10, cableLat:10, rearDelt:10, facepull:25,
+    bbCurl:30, inclineCurl:15, hammerCurl:20, preacher:25,
+    pushdown:30, ropePush:30, skull:30,
+    legCurl:50, legExt:50, calfStand:90, calfSeat:45,
+    legPress:135, hackSquat:90, bulgarian:25, walkLunge:25, hipThrust:95,
+    latPull:70, csRow:70, seatedRow:70, tbar:45, cableFly:15,
+    dbBench:35, inclineDB:30, dbOHP:25, pullup:0, weightedDip:0,
+  };
+  function round5(x) { return Math.max(0, Math.round(x / 5) * 5); }
+  function repNum(reps, fallback) { const m = String(reps || '').match(/\d+/); return m ? +m[0] : fallback; }
+  // Suggest a starting weight + a target to work up to for a lift with no history.
+  function startEstimate(key, reps) {
+    const r = repNum(reps, 8);
+    const p = predict(key, r);                          // from your other lifts via strength ratios
+    if (p && p.working > 0) { const cap = round5(p.working); return { start: Math.max(round5(p.working * 0.9), 5), target: cap, basis: p.basis }; }
+    if (key in START_DEFAULTS) {                         // sensible beginner load, scaled to bodyweight
+      const bw = Store.latestWeight() || 170;
+      const w = round5(START_DEFAULTS[key] * UI.clamp(bw / 170, 0.7, 1.4));
+      return { start: w, target: null, basis: 'a conservative starting load' };
+    }
+    return null;
+  }
+
   function makeInstance(ex, bias) {
     const scheme = DATA.repScheme(ex.type, bias);
     const reps = ex.editedReps ? ex.reps : (ex.reps || scheme.reps);
     const setCount = ex.type === 'cond' ? 1 : (ex.sets || 3);
     const hist = Store.exerciseHistory(ex.key);
-    let suggest = '', lastNote = null;
+    let suggest = '', lastNote = null, startHint = null;
     if (hist.length) {
       const last = hist[0];
       lastNote = `Last: ${last.weight} lb × ${last.reps}`;
       suggest = last.weight;
       if (scheme.high && last.reps >= scheme.high) suggest = +last.weight + progressionInc(ex.type);
+    } else if (ex.type === 'main' || ex.type === 'acc') {
+      startHint = startEstimate(ex.key, reps);
+      if (startHint) suggest = startHint.start;
     }
     return {
       key: ex.key, name: ex.name, type: ex.type, reps, rir: scheme.rir || '', editedReps: !!ex.editedReps,
       muscle: ex.muscle || null, group: ex.group || null, mj: !!ex.mj, stretch: !!ex.stretch, lp: !!ex.lp,
-      suggest, lastNote,
+      suggest, lastNote, startHint,
       sets: Array.from({ length: setCount }, () => ({ weight: suggest, reps: '', done: false }))
     };
   }
 
-  // Multi-joint first ordering (lower CNS fatigue on the big lifts), then
-  // pair antagonist movements into supersets (AAPS) for efficiency.
+  // Multi-joint first ordering (lower CNS fatigue on the big lifts), then pair
+  // ONLY antagonist *isolations* into supersets. Heavy compounds are never
+  // supersetted — they run as straight sets with full rest so force output and
+  // technique don't degrade (axial/CNS fatigue), per current hypertrophy science.
   function arrange(list) {
     const tier = e => e.type === 'plyo' ? 0 : e.type === 'main' ? 1 : e.type === 'acc' ? 2 : e.type === 'abs' ? 3 : 4;
     const ordered = list.slice().sort((a, b) => tier(a) - tier(b));
@@ -51,13 +82,55 @@ App.Workout = (function () {
       const a = ordered[i]; used[i] = true;
       const want = DATA.ANTAG[a.group];
       let j = -1;
-      if (want) for (let k = i + 1; k < ordered.length; k++) {
-        if (!used[k] && ordered[k].group === want && ordered[k].type === a.type) { j = k; break; }
+      // accessory ↔ accessory antagonist pairs only (no main lifts back-to-back)
+      if (want && a.type === 'acc') for (let k = i + 1; k < ordered.length; k++) {
+        if (!used[k] && ordered[k].type === 'acc' && ordered[k].group === want) { j = k; break; }
       }
       if (j >= 0) { const lab = String.fromCharCode(65 + letter++); a.ss = lab + '1'; ordered[j].ss = lab + '2'; used[j] = true; out.push(a, ordered[j]); }
       else out.push(a);
     }
     return out;
+  }
+
+  /* ---------- session variation (accessories rotate; anchors stay) ---------- */
+  // Interchangeable accessory pools — same muscle/role, swapped session-to-session
+  // for fresh stimulus. Heavy compounds are intentionally excluded so you can
+  // progressively overload them. Members must be real keys in DATA.ALL.
+  const VARIANT_POOLS = [
+    ['lateral', 'cableLat'],
+    ['facepull', 'rearDelt'],
+    ['bbCurl', 'inclineCurl', 'hammerCurl', 'preacher'],
+    ['pushdown', 'ropePush', 'skull'],
+    ['inclineDB', 'dbBench', 'cableFly'],
+    ['csRow', 'seatedRow', 'tbar'],
+    ['legPress', 'hackSquat', 'bulgarian', 'walkLunge'],
+    ['legExt', 'legPress'],
+    ['legCurl'],
+    ['calfStand', 'calfSeat'],
+    ['cableCrunch', 'legRaise', 'abWheel', 'pallof', 'russian'],
+  ];
+  const POOL_OF = {};
+  VARIANT_POOLS.forEach(pool => pool.forEach(k => { POOL_OF[k] = pool; }));
+
+  // Rotate each accessory to a fresh variant based on a session seed, keeping the
+  // programmed set count and avoiding duplicating a movement already in the day.
+  function applyVariation(defs, seed) {
+    const usedKeys = new Set(defs.map(d => d.key));
+    return defs.map(d => {
+      if (d.type !== 'acc') return d;                 // anchors & compounds untouched
+      const pool = POOL_OF[d.key];
+      if (!pool || pool.length < 2) return d;
+      const base = pool.indexOf(d.key);
+      let chosen = d.key;
+      for (let s = 0; s < pool.length; s++) {
+        const cand = pool[(base + seed + s) % pool.length];
+        if (cand === d.key) { chosen = cand; break; }
+        if (!usedKeys.has(cand)) { chosen = cand; break; }
+      }
+      usedKeys.delete(d.key); usedKeys.add(chosen);
+      const repl = DATA.ALL[chosen]; if (!repl) return d;
+      return Object.assign({}, repl, { sets: d.sets || repl.sets });   // keep programmed volume
+    });
   }
 
   function resolveDef(entry) {
@@ -120,21 +193,29 @@ App.Workout = (function () {
     if (existing && existing.dayType === dayType) return existing;
 
     const ov = Store.getProgramOverride(dayType);
-    const defs = ov ? ov.map(resolveDef).filter(Boolean) : baseDefs;
+    let defs = ov ? ov.map(resolveDef).filter(Boolean) : baseDefs;
+    // Fresh accessory variation each session (anchors/compounds stay for overload).
+    let varied = false;
+    if (!ov && !routine && Store.profile().varyWorkouts !== false) {
+      const newDefs = applyVariation(defs, Store.trainingDates().length);
+      varied = newDefs.some((d, i) => d.key !== defs[i].key);
+      defs = newDefs;
+    }
     let exercises = defs.map(ex => makeInstance(ex, bias));
-    if (!ov && !routine) exercises = arrange(exercises);   // MJ-first + supersets for default templates
+    if (!ov && !routine) exercises = arrange(exercises);   // MJ-first + isolation supersets for default templates
     if (deload) exercises.forEach(ex => {
       if (ex.type === 'cond') return;
       if (ex.sets.length > 2) ex.sets.pop();   // trim a set
       ex.rir = '3–4 RIR · deload';
     });
-    // Advanced final-set intensity techniques on hypertrophy/power days
+    // Final-set intensity techniques — ISOLATIONS only. Heavy compounds are never
+    // taken to failure (CNS/axial fatigue without extra strength benefit).
     if (!deload && Store.profile().intensityTech && (bias === 'hypertrophy' || bias === 'power')) {
       const TECH = ['Rest-pause', 'Drop set', '3–5s eccentric'];
       let i = 0;
-      exercises.forEach(ex => { if (ex.type === 'main' || ex.type === 'acc') { ex.finisher = TECH[i % TECH.length]; i++; } });
+      exercises.forEach(ex => { if (ex.type === 'acc') { ex.finisher = TECH[i % TECH.length]; i++; } });
     }
-    return { dateKey, week, bias, planTitle: pl.title, dayType, dayName, exercises, customized: !!ov, switched: !!choice, deload, isRoutine: !!routine };
+    return { dateKey, week, bias, planTitle: pl.title, dayType, dayName, exercises, customized: !!ov, switched: !!choice, deload, isRoutine: !!routine, varied };
   }
 
   function persist() { if (current) Store.saveWorkout(current.dateKey, current); }
@@ -168,6 +249,7 @@ App.Workout = (function () {
           <div class="pill accent">Week ${current.week}</div>
           <div class="pill" style="margin-left:6px">${UI.esc(App.Goals.biasLabel(current.bias))}</div>
           ${current.switched ? '<div class="pill orange" style="margin-left:6px">↺ Switched</div>' : ''}
+          ${current.varied ? '<div class="pill" style="margin-left:6px">↻ Fresh variation</div>' : ''}
           ${current.customized ? '<div class="pill" style="margin-left:6px">✎ Custom</div>' : ''}
         </div>
         <div class="row" style="gap:8px">
@@ -183,7 +265,8 @@ App.Workout = (function () {
     if (!editMode) {
       if (current.deload) html += `<div class="banner info" style="margin-bottom:12px"><span class="b-ico">🪫</span><div><b>Deload day</b>Reduced volume and lighter effort (leave 3–4 reps in reserve). Use it to recover while keeping the groove.</div></div>`;
       html += volumeWarn();
-      if (current.exercises.some(e => e.ss)) html += `<div class="banner info" style="margin-bottom:12px"><span class="b-ico">🔁</span><div><b>Supersets</b>Pairs marked A1/A2, B1/B2… are antagonist supersets — do them back-to-back with short rest.</div></div>`;
+      html += weakBanner();
+      if (current.exercises.some(e => e.ss)) html += `<div class="banner info" style="margin-bottom:12px"><span class="b-ico">🔁</span><div><b>Isolation supersets</b>Pairs marked A1/A2… are antagonist <i>isolations</i> — run them back-to-back. Heavy compounds stay as straight sets with full rest.</div></div>`;
     }
 
     current.exercises.forEach((ex, i) => { html += editMode ? exerciseCardEdit(ex, i) : exerciseCard(ex, i); });
@@ -237,8 +320,15 @@ App.Workout = (function () {
         </div>`).join('');
     }
     const meta = `${ex.type === 'cond' ? '' : setCount + ' sets × '}${UI.esc(ex.reps)}${ex.rir ? ` · ${UI.esc(ex.rir)}` : ''}`;
-    const cue = ex.lp ? 'Take the last set to failure, then add lengthened partials in the stretch.'
-      : ex.stretch ? 'Control the stretch — load the muscle at its longest length.' : '';
+    // Sliding proximity-to-failure + long-length coaching by exercise role.
+    let cue = '';
+    if (ex.type === 'main') cue = 'Heavy compound — leave 1–2 reps in reserve and pause in the stretch. Don\'t take these to failure.';
+    else if (ex.lp) cue = 'Last set to failure, then add lengthened partials in the stretch.';
+    else if (ex.stretch) cue = 'Control the stretch — load the muscle at its longest length; final set 0–1 RIR.';
+    else if (ex.type === 'acc') cue = 'Push the last set to 0–1 reps in reserve.';
+    const startLine = (!ex.lastNote && ex.startHint)
+      ? `<div class="last-hint suggest">${ex.startHint.start > 0 ? `Start ~${ex.startHint.start} lb` : 'Start with bodyweight'}${ex.startHint.target ? ` · work up toward ~${ex.startHint.target} lb` : ''} <span class="muted">(${UI.esc(ex.startHint.basis)} — adjust to your real strength)</span></div>`
+      : '';
     return `
     <div class="ex-card ${cardDone ? 'done' : ''}">
       <div class="ex-head">
@@ -251,7 +341,7 @@ App.Workout = (function () {
       ${inner}
       ${ex.finisher ? `<div class="last-hint"><span class="fin-badge">🔥 Final set: ${ex.finisher}</span> ${finisherHint(ex.finisher)}</div>` : ''}
       ${cue ? `<div class="last-hint suggest">${cue}</div>` : ''}
-      ${ex.lastNote ? `<div class="last-hint">${UI.esc(ex.lastNote)} · <span class="suggest">target ${ex.suggest || '—'} lb</span></div>` : (ex.type !== 'cond' ? `<div class="last-hint">First time — log it to start tracking.</div>` : '')}
+      ${ex.lastNote ? `<div class="last-hint">${UI.esc(ex.lastNote)} · <span class="suggest">target ${ex.suggest || '—'} lb</span></div>` : (startLine || (ex.type !== 'cond' ? `<div class="last-hint">First time — log it to start tracking.</div>` : ''))}
     </div>`;
   }
 
@@ -263,7 +353,19 @@ App.Workout = (function () {
     });
     const over = Object.entries(by).filter(([, n]) => n > 8);
     if (!over.length) return '';
-    return `<div class="banner warn" style="margin-bottom:12px"><span class="b-ico">⚠️</span><div><b>High session volume</b>${over.map(([m, n]) => `${n} sets ${m}`).join(', ')} — past ~8 hard sets for one muscle in a session adds fatigue with little extra growth.</div></div>`;
+    return `<div class="banner warn" style="margin-bottom:12px"><span class="b-ico">⚠️</span><div><b>High session volume</b>${over.map(([m, n]) => `${n} sets ${m}`).join(', ')} — past ~8 hard sets for one muscle in a session is junk volume: fatigue with little extra growth.</div></div>`;
+  }
+
+  // Surface the biggest lagging muscle with a one-tap accessory add.
+  function weakBanner() {
+    const ws = App.Workout.weakSpots ? App.Workout.weakSpots() : [];
+    if (!ws.length) return '';
+    const have = new Set(current.exercises.map(e => e.key));
+    const top = ws.find(w => (w.suggest || []).some(k => !have.has(k)));
+    if (!top) return '';
+    const pick = top.suggest.find(k => !have.has(k));
+    const ex = DATA.ALL[pick]; if (!ex) return '';
+    return `<div class="banner info" style="margin-bottom:12px"><span class="b-ico">🎯</span><div><b>Weak point: ${UI.esc(top.muscle)}</b>Only ~${top.sets} hard sets/week lately (aim 10–20). Bring it up — <button class="link" data-quickadd="${pick}" style="color:var(--accent);font-weight:700">add ${UI.esc(ex.name)} ▸</button></div></div>`;
   }
 
   function exerciseCardEdit(ex, i) {
@@ -452,6 +554,16 @@ App.Workout = (function () {
       const firstMain = current.exercises.find(e => e.type === 'main');
       plateSheet(firstMain && firstMain.suggest ? firstMain.suggest : 135);
     });
+    container.querySelectorAll('[data-quickadd]').forEach(b => b.addEventListener('click', () => quickAdd(b.dataset.quickadd, container)));
+  }
+
+  // Add a weak-point accessory to this day (sticks for future sessions of this type).
+  function quickAdd(key, c) {
+    const def = DATA.ALL[key]; if (!def) return;
+    current.exercises.push(makeInstance(def, current.bias));
+    current.customized = true; rebalance(); persist(); syncOverride();
+    render(c, current.dateKey);
+    UI.toast(def.name + ' added to bring up your weak point', 'good');
   }
 
   /* ---------- choose / switch today's workout ---------- */
@@ -725,15 +837,16 @@ App.Workout = (function () {
     UI.modal(`<h2>Training notes</h2>
       <div class="card" style="line-height:1.55">
         <b>${UI.esc(pl.title)}</b><br>
-        <span class="muted">Emphasis: ${UI.esc(App.Goals.biasLabel(pl.bias))}. Progress by adding weight or a rep when you hit the top of the range with good form, leaving the prescribed reps-in-reserve.</span>
+        <span class="muted">Emphasis: ${UI.esc(App.Goals.biasLabel(pl.bias))}. <b>Double progression</b> — work to the top of the rep range across all sets, then add a little weight and drop back to the bottom. Heavy compounds stop 1–2 reps shy of failure; isolations earn the last rep.</span>
       </div>
       <div class="card" style="margin-top:12px;line-height:1.5">
-        <b>How exercises are chosen</b>
+        <b>How it's programmed</b>
         <ul class="guide-list">
-          <li>Each session balances horizontal + vertical pressing and pulling, so no plane is overworked.</li>
-          <li>Multi-joint compounds lead while you're fresh; isolation follows.</li>
-          <li>Stretch-biased picks (incline curl, overhead triceps, RDL, deep squats) load the muscle at long lengths for more growth.</li>
-          <li>Opposing movements pair into supersets to save time and lift output.</li>
+          <li><b>Anchors stay, accessories rotate.</b> Big compounds repeat so you can add weight every week; isolations rotate variants each session for fresh stimulus.</li>
+          <li><b>Volume:</b> 12–20 hard sets per muscle per week (synergists count ½), spread over ~2 sessions. Past ~8 sets for one muscle in a day is junk volume.</li>
+          <li><b>Order:</b> compounds first while you're fresh; only antagonist isolations superset — never heavy lifts back-to-back.</li>
+          <li><b>Long muscle lengths:</b> control and pause the stretch (incline curl, overhead triceps, RDL, deep squats); add lengthened partials past failure where flagged.</li>
+          <li><b>Proximity to failure:</b> compounds 1–2 RIR, isolations 0–1 RIR — failure techniques live on isolations only.</li>
         </ul>
       </div>
       <div class="card" style="margin-top:12px;line-height:1.5">
@@ -790,5 +903,51 @@ App.Workout = (function () {
     return out;
   }
 
-  return { build, render, epley1RM, weightForReps, best1RM, predict, estimatedLifts, anchorOneRM };
+  /* ============================================================
+     WEAK-POINT ANALYSIS — fractional weekly volume per muscle
+     Direct sets count 1.0, synergist sets 0.5 (junk-volume aware).
+     ============================================================ */
+  function weeklyVolumeByMuscle(days) {
+    days = days || 21;
+    const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0); cutoff.setDate(cutoff.getDate() - days);
+    const vol = {};
+    Store.allWorkoutLogs().forEach(log => {
+      if (!log || !log.dateKey || log.isRun) return;
+      if (new Date(log.dateKey + 'T00:00:00') < cutoff) return;
+      (log.exercises || []).forEach(ex => {
+        const done = (ex.sets || []).filter(s => s.done).length;
+        if (!done) return;
+        const prim = (DATA.ALL[ex.key] && DATA.ALL[ex.key].muscle) || DATA.MUSCLE[ex.key];
+        if (prim) vol[prim] = (vol[prim] || 0) + done;
+        (DATA.SECONDARY[ex.key] || []).forEach(m => { vol[m] = (vol[m] || 0) + done * 0.5; });
+      });
+    });
+    const weeks = days / 7;
+    Object.keys(vol).forEach(k => { vol[k] = Math.round(vol[k] / weeks * 10) / 10; });
+    return vol;   // { muscle: sets/week }
+  }
+
+  // Muscles tracked for weak-point flagging, and good accessory fixes for each.
+  const TRACKED = ['chest', 'back', 'quads', 'hamstrings', 'side delts', 'rear delts', 'biceps', 'triceps', 'calves'];
+  const MUSCLE_FIX = {
+    chest:['inclineDB','cableFly'], back:['csRow','seatedRow'],
+    quads:['legExt','legPress'], hamstrings:['legCurl','rdl'],
+    'side delts':['lateral','cableLat'], 'rear delts':['facepull','rearDelt'],
+    biceps:['inclineCurl','hammerCurl'], triceps:['pushdown','skull'], calves:['calfStand','calfSeat'],
+  };
+  // Returns lagging muscles (under ~10 effective sets/wk), worst first. Quiet until
+  // there's enough history to judge (≥6 sessions), so beginners aren't nagged.
+  function weakSpots() {
+    if (Store.trainingDates().length < 6) return [];
+    const vol = weeklyVolumeByMuscle(21);
+    const TARGET = 10;
+    const out = [];
+    TRACKED.forEach(m => {
+      const v = vol[m] || 0;
+      if (v < TARGET) out.push({ muscle: m, sets: v, deficit: TARGET - v, suggest: MUSCLE_FIX[m] || [] });
+    });
+    return out.sort((a, b) => b.deficit - a.deficit);
+  }
+
+  return { build, render, epley1RM, weightForReps, best1RM, predict, estimatedLifts, anchorOneRM, startEstimate, weeklyVolumeByMuscle, weakSpots };
 })();

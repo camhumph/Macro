@@ -296,6 +296,17 @@ App.DATA = (function () {
     rdl:'ham', legCurl:'ham', deadlift:'ham',
   };
   const ANTAG = { horizPush:'horizPull', horizPull:'horizPush', vertPush:'vertPull', vertPull:'vertPush', quad:'ham', ham:'quad', biceps:'triceps', triceps:'biceps' };
+  // Synergist muscles worked indirectly (fractional 0.5-set volume credit), used
+  // for weekly volume accounting and weak-point detection. Primary muscle (1.0)
+  // comes from MUSCLE above; these are the meaningful secondary movers.
+  const SECONDARY = {
+    flatBench:['triceps','delts'], inclineBB:['triceps','delts'], dbBench:['triceps','delts'], inclineDB:['triceps','delts'], cableFly:['delts'],
+    weightedDip:['triceps'], ohp:['triceps'], dbOHP:['triceps'],
+    bbRow:['biceps','rear delts'], csRow:['biceps','rear delts'], tbar:['biceps','rear delts'], seatedRow:['biceps','rear delts'],
+    pullup:['biceps'], latPull:['biceps'],
+    squat:['glutes','hamstrings'], frontSquat:['glutes'], legPress:['glutes'], hackSquat:['glutes'], bulgarian:['glutes','hamstrings'], walkLunge:['glutes','hamstrings'],
+    rdl:['glutes','back'], deadlift:['glutes','back'], hipThrust:['hamstrings'],
+  };
   // exercises that load the muscle hard at long lengths (stretch-mediated hypertrophy)
   const STRETCH = new Set(['inclineBB','inclineDB','dbBench','cableFly','rdl','legCurl','squat','frontSquat','bulgarian','walkLunge','legPress','inclineCurl','skull','ropePush','latPull','pullup','calfSeat','calfStand']);
   // exercises where lengthened partials past failure add useful volume
@@ -316,5 +327,5 @@ App.DATA = (function () {
     return CAT_ORDER.filter(c => groups[c]).map(c => ({ cat:c, items:groups[c] }));
   }
 
-  return { FOODS, foodById, E, DAYS, SPLITS, buildSchedule, repScheme, RATIOS, ANTAG, ALL, exLibrary, CAT_ORDER };
+  return { FOODS, foodById, E, DAYS, SPLITS, buildSchedule, repScheme, RATIOS, ANTAG, SECONDARY, MUSCLE, ALL, exLibrary, CAT_ORDER };
 })();

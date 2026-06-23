@@ -31,6 +31,7 @@ App.Store = (function () {
         gainRate:'moderate',    // 'lean' | 'moderate' | 'aggressive' | 'max' (bulking pace)
         lifterStatus:'returning', // 'beginner' | 'returning' | 'intermediate' | 'advanced'
         intensityTech:true,     // advanced final-set techniques on hypertrophy days
+        varyWorkouts:true,      // rotate accessory variants each session (anchors stay)
         split:'auto',           // 'auto' | 'fullbody' | 'upperlower' | 'ppl'
         daysPerWeek:0,          // 0 = derive from split
         scheduleMode:'flexible',// 'flexible' (next-in-rotation, adapts) | 'fixed' (weekday-based)
