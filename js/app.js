@@ -547,6 +547,7 @@ window.App = window.App || {};
         App.Reminders.start();
         close(); setProfileInitial(); Router.go('today');
         UI.toast('Plan ready', 'good');
+        App.Profiles.flushInvite();
         if (goals.includes('marathon')) App.Running.setupSheet(() => Router.refresh());
       };
     });
@@ -568,6 +569,7 @@ window.App = window.App || {};
     setProfileInitial();
     App.Reminders.start();
     Router.go('today');
+    App.Profiles.flushInvite();   // prompt any pending friend invite now it's visible
   };
   App.afterProfileChange = () => App.enterApp();
 
@@ -593,8 +595,9 @@ window.App = window.App || {};
     if (!anyOnboarded) { App.Reminders.start(); onboard(); }
     else { App.Profiles.launchSelector(); }
 
-    // Friend invite link (#friend=…) → offer to add them to the leaderboard.
-    App.Profiles.consumeInvite();
+    // Friend invite link (#friend=…) — capture now, prompt once the app UI is
+    // visible (the launch overlay sits above modals).
+    App.Profiles.captureInvite();
 
     // service worker (offline + installable)
     if ('serviceWorker' in navigator) {

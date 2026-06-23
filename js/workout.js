@@ -173,9 +173,10 @@ App.Workout = (function () {
     if (isChoice) {
       dayType = choice.type; deload = choice.deload;
     } else if (mode === 'flexible') {
-      // Adaptive: show the next workout in the rotation. Missing a day never
-      // desyncs you — once you start today it pins, otherwise it's "next up".
-      dayType = existing ? existing.dayType : rotation[Store.trainingDates().length % rotation.length];
+      // Adaptive: next workout follows what you ACTUALLY trained last — so if you
+      // switch today's session, the rotation continues from there onward. Missing
+      // a day never desyncs you; once you start today it pins.
+      dayType = existing ? existing.dayType : nextInRotation(rotation);
     } else {
       dayType = DATA.buildSchedule(pl.split, pl.days, pl.cardio)[dow];
     }
@@ -336,7 +337,10 @@ App.Workout = (function () {
           <h3>${ex.ss ? `<span class="ss-chip">${ex.ss}</span>` : ''}${UI.esc(ex.name)}${ex.stretch ? ' <span class="stretch-tag">stretch</span>' : ''}</h3>
           <div class="ex-meta">${meta}</div>
         </div>
-        <span class="ex-tag ${tag.cls}">${tag.txt}</span>
+        <div class="row" style="gap:8px;align-items:center">
+          ${ex.type !== 'cond' ? `<button class="icon-btn" data-swapex="${i}" title="Swap" style="width:30px;height:30px;color:var(--faint);font-size:15px">⇄</button>` : ''}
+          <span class="ex-tag ${tag.cls}">${tag.txt}</span>
+        </div>
       </div>
       ${inner}
       ${ex.finisher ? `<div class="last-hint"><span class="fin-badge">🔥 Final set: ${ex.finisher}</span> ${finisherHint(ex.finisher)}</div>` : ''}
@@ -555,6 +559,7 @@ App.Workout = (function () {
       plateSheet(firstMain && firstMain.suggest ? firstMain.suggest : 135);
     });
     container.querySelectorAll('[data-quickadd]').forEach(b => b.addEventListener('click', () => quickAdd(b.dataset.quickadd, container)));
+    container.querySelectorAll('[data-swapex]').forEach(b => b.addEventListener('click', () => swapSheet(+b.dataset.swapex, container)));
   }
 
   // Add a weak-point accessory to this day (sticks for future sessions of this type).
@@ -573,11 +578,21 @@ App.Workout = (function () {
     { label: 'Full Body', items: ['fullA', 'fullB', 'fullC'] },
     { label: 'Other', items: ['conditioning', 'rest'] },
   ];
+  // The day AFTER whatever you last actually trained (within this split's
+  // rotation). Switching a day therefore carries the rotation forward from it.
+  function nextInRotation(rotation) {
+    const logs = Store.allWorkoutLogs();   // completed sessions, newest first
+    for (const l of logs) {
+      const idx = rotation.indexOf(l.dayType);
+      if (idx >= 0) return rotation[(idx + 1) % rotation.length];
+    }
+    return rotation[0];
+  }
   // Next workout in the rotation (what "adaptive" recommends today).
   function nextRotationType() {
     const pl = App.Goals.plan();
     const rot = (DATA.SPLITS[pl.split] || DATA.SPLITS.upperlower).rotation;
-    return rot[Store.trainingDates().length % rot.length];
+    return nextInRotation(rot);
   }
   // A session that avoids a sore area.
   function complementFor(soreArea) {
@@ -657,7 +672,7 @@ App.Workout = (function () {
   function wireEdit(container) {
     container.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => removeExercise(+b.dataset.rm, container));
     container.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => editDetailsSheet(+b.dataset.edit, container));
-    container.querySelectorAll('[data-swap]').forEach(b => b.onclick = () => picker('swap', +b.dataset.swap, container));
+    container.querySelectorAll('[data-swap]').forEach(b => b.onclick = () => swapSheet(+b.dataset.swap, container));
     container.querySelectorAll('[data-sets]').forEach(b => b.onclick = () => changeSets(+b.dataset.sets, +b.dataset.d, container));
     const add = container.querySelector('#wk-add'); if (add) add.onclick = () => picker('add', null, container);
     const reset = container.querySelector('#wk-reset'); if (reset) reset.onclick = () => resetDay(container);
@@ -744,6 +759,45 @@ App.Workout = (function () {
   }
   function picker(mode, idx, c) {
     libraryPicker(mode === 'swap' ? 'Swap exercise' : 'Add exercise', def => mode === 'swap' ? swapExercise(idx, def, c) : addExerciseByDef(def, c));
+  }
+
+  // Smart swap suggestions: closest variants first, then same-muscle options.
+  function suggestSwaps(ex) {
+    const out = [], seen = new Set([ex.key]);
+    const add = k => { if (!seen.has(k) && DATA.ALL[k]) { seen.add(k); out.push(k); } };
+    if (ex.type === 'cond') {
+      Object.values(DATA.ALL).forEach(o => { if (o.type === 'cond') add(o.key); });
+      return out.filter(k => k !== ex.key).slice(0, 8);
+    }
+    (POOL_OF[ex.key] || []).forEach(add);                 // direct variants
+    const muscle = ex.muscle || DATA.MUSCLE[ex.key];
+    const cat = (DATA.ALL[ex.key] || {}).cat;
+    Object.values(DATA.ALL).forEach(o => { if (o.type !== 'cond' && muscle && o.muscle === muscle && o.type === ex.type) add(o.key); });
+    Object.values(DATA.ALL).forEach(o => { if (o.type !== 'cond' && muscle && o.muscle === muscle) add(o.key); });
+    Object.values(DATA.ALL).forEach(o => { if (o.type !== 'cond' && !muscle && o.cat === cat) add(o.key); });
+    return out.slice(0, 8);
+  }
+  function swapSheet(i, c) {
+    const ex = current.exercises[i];
+    const sugg = suggestSwaps(ex);
+    const have = new Set(current.exercises.map(e => e.key));
+    const row = k => {
+      const d = DATA.ALL[k];
+      return `<div class="search-result" data-swapkey="${k}">
+        <div class="food-thumb">${CAT_EMOJI[d.cat] || '🏋️'}</div>
+        <div class="sr-main"><b>${UI.esc(d.name)}</b><small>${typeLabel(d.type)}${d.stretch ? ' · stretch' : ''}${have.has(k) ? ' · already today' : ''}</small></div>
+        <div style="color:var(--accent);font-size:22px">⇄</div></div>`;
+    };
+    UI.modal(`
+      <h2>Swap ${UI.esc(ex.name)}</h2>
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Alternatives that train the same muscle. Your sets, reps and progress target carry over.</p>
+      <div class="meal-head"><b>Suggested swaps</b><span></span></div>
+      ${sugg.length ? sugg.map(row).join('') : '<p class="muted" style="padding:10px 4px">No close matches — browse the full library.</p>'}
+      <button class="btn ghost" id="sw-lib" style="margin-top:12px">Browse full library ▸</button>
+    `, (m, close) => {
+      m.querySelectorAll('[data-swapkey]').forEach(el => el.onclick = () => { const def = DATA.ALL[el.dataset.swapkey]; close(); swapExercise(i, def, c); });
+      m.querySelector('#sw-lib').onclick = () => { close(); picker('swap', i, c); };
+    });
   }
   function customExercise(onPick) {
     UI.modal(`

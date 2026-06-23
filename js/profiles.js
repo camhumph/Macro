@@ -6,9 +6,13 @@ window.App = window.App || {};
 App.Profiles = (function () {
   const Store = App.Store, UI = App.UI, LB = App.Leaderboard;
 
+  // Friends (added from a link/code) are leaderboard-only — never shown as
+  // selectable training profiles.
+  function realProfiles() { return Store.allProfilesData().filter(p => !p.state._friendCode); }
+
   /* ---------- launch profile selector ("Who's training?") ---------- */
   function launchSelector() {
-    const data = Store.allProfilesData();
+    const data = realProfiles();
     let host = document.getElementById('launch');
     if (!host) { host = document.createElement('div'); host.id = 'launch'; host.className = 'launch'; document.body.appendChild(host); }
     host.innerHTML = `
@@ -30,7 +34,7 @@ App.Profiles = (function () {
 
   /* ---------- profile switcher ---------- */
   function switcher() {
-    const data = Store.allProfilesData();
+    const data = realProfiles();
     const me = Store.activeId();
     UI.modal(`
       <h2>Profiles</h2>
@@ -161,6 +165,14 @@ App.Profiles = (function () {
   function friendLink() {
     return location.href.split('#')[0] + '#friend=' + b64e(JSON.stringify(friendPayload()));
   }
+  // Stable id for a link/file-imported friend, so re-adding the same person
+  // updates them in place instead of creating a duplicate.
+  function friendCodeFor(obj) {
+    const p = obj.profile || {}; const s = (p.name || 'friend') + '|' + (p.startDate || '');
+    let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return 'lnk_' + h.toString(36);
+  }
+
   // Pull a friend payload out of whatever the user pasted: a Macro link, a raw
   // base64 token, or full profile JSON. Returns the parsed object or null.
   function parseFriendInput(raw) {
@@ -230,31 +242,39 @@ App.Profiles = (function () {
       m.querySelector('#af-go').onclick = () => {
         const obj = parseFriendInput(ta.value);
         if (!obj) return UI.toast('That isn\'t a valid Macro invite');
-        Store.importAsNewProfile(obj);
+        Store.upsertFriend(friendCodeFor(obj), obj);
         close(); App.Router.refresh(); UI.toast((obj.profile.name || 'Friend') + ' added 🏆', 'good');
       };
     });
   }
 
-  // On launch, if the URL carries a #friend= invite, offer to add them.
-  function consumeInvite() {
+  // A #friend= invite is captured on boot, but prompted only once the app UI is
+  // up — the "Who's training?" overlay sits above modals, so an on-boot prompt
+  // would be invisible behind it.
+  let pendingInvite = null;
+  function captureInvite() {
     const h = location.hash || '';
-    if (h.indexOf('#friend=') !== 0 && h.indexOf('friend=') === -1) return false;
+    if (h.indexOf('friend=') === -1) return false;
     const obj = parseFriendInput(h);
-    // Clear the hash so a refresh doesn't re-prompt.
     try { history.replaceState(null, '', location.href.split('#')[0]); } catch (e) { location.hash = ''; }
-    if (!obj) return false;
+    if (obj) pendingInvite = obj;
+    return !!obj;
+  }
+  function flushInvite() {
+    if (!pendingInvite) return;
+    const obj = pendingInvite; pendingInvite = null;
     const name = obj.profile.name || 'A friend';
     UI.modal(`
       <h2>Friend invite</h2>
       <p style="margin:-6px 0 14px;line-height:1.5"><b>${UI.esc(name)}</b> shared their Macro profile. Add them to your leaderboard so you can compare progress?</p>
       <div class="btn-row"><button class="btn primary" id="iv-add">Add ${UI.esc(name)}</button><button class="btn ghost" id="iv-no">Not now</button></div>
     `, (m, close) => {
-      m.querySelector('#iv-add').onclick = () => { Store.importAsNewProfile(obj); close(); UI.toast(name + ' added 🏆', 'good'); if (App.Router) App.Router.refresh(); };
+      m.querySelector('#iv-add').onclick = () => { Store.upsertFriend(friendCodeFor(obj), obj); close(); UI.toast(name + ' added 🏆', 'good'); if (App.Router) App.Router.refresh(); };
       m.querySelector('#iv-no').onclick = close;
     });
-    return true;
   }
+  // Back-compat: capture + flush immediately.
+  function consumeInvite() { const had = captureInvite(); flushInvite(); return had; }
 
-  return { launchSelector, switcher, newProfile, editProfile, shareApp, shareProfile, addFriend, friendLink, consumeInvite };
+  return { launchSelector, switcher, newProfile, editProfile, shareApp, shareProfile, addFriend, friendLink, friendPayload, captureInvite, flushInvite, consumeInvite };
 })();

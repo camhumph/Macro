@@ -173,8 +173,9 @@ App.Leaderboard = (function () {
           <div class="lb-row ${p.id === meId ? 'me' : ''}">
             <div class="lb-rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1)}</div>
             <div class="lb-av" style="background:${p.meta.color}">${p.meta.emoji}</div>
-            <div class="lb-name"><b>${UI.esc(p.meta.name)}${p.id === meId ? ' <span class="muted" style="font-weight:500">(you)</span>' : ''}</b><small>${rankTitle(levelOf(p.state).level)}</small></div>
+            <div class="lb-name"><b>${UI.esc(p.meta.name)}${p.id === meId ? ' <span class="muted" style="font-weight:500">(you)</span>' : p.state._friendCode ? ' <span class="muted" style="font-weight:500">· friend</span>' : ''}</b><small>${rankTitle(levelOf(p.state).level)}</small></div>
             <div class="lb-val">${(p.val || 0).toLocaleString()}<small>${meta.unit}</small></div>
+            ${p.state._friendCode ? `<button class="icon-btn" data-rmfriend="${p.id}" style="width:26px;height:26px;color:var(--faint);font-size:15px;flex-shrink:0">×</button>` : ''}
           </div>`).join('')}
       </div>
       <p class="muted center" style="font-size:12px;margin-top:10px">Compete with friends by adding their shared profile. <button class="link" id="lb-share" style="color:var(--accent)">Share yours ▸</button></p>
@@ -193,6 +194,9 @@ App.Leaderboard = (function () {
     container.querySelectorAll('#lb-seg button').forEach(b => b.onclick = () => { curMetric = b.dataset.m; render(container); });
     container.querySelector('#lb-add').onclick = () => App.Profiles.addFriend();
     container.querySelector('#lb-share').onclick = () => App.Profiles.shareProfile();
+    container.querySelectorAll('[data-rmfriend]').forEach(b => b.onclick = () => {
+      if (confirm('Remove this friend from your leaderboard?')) { Store.deleteProfile(b.dataset.rmfriend); render(container); UI.toast('Friend removed'); }
+    });
   }
 
   return { metrics, levelOf, rankTitle, achievements, streakCard, render, METRICS, strengthScore };
