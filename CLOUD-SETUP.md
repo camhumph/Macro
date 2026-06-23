@@ -1,6 +1,11 @@
 # Putting Macro online (accounts, cloud save, friend codes)
 
-By default Macro is fully on-device. Turning on **cloud sync** lets you:
+> **Status:** the Firebase project config is already baked into the app
+> (`macro-fabf9`). The only things left to switch on in the Firebase console are
+> **Email/Password sign-in** and **Firestore + its security rules** (steps 2 and
+> 3 below). Step 1 (create project) and steps 4–5 (config/paste) are done.
+
+Turning on **cloud sync** lets you:
 
 - **Sign in** with an email + password and have your account saved online.
 - **Sync across devices** — open Macro on another phone/computer, sign in, and

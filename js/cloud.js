@@ -13,6 +13,18 @@ App.Cloud = (function () {
   const FRIENDS_KEY = 'macro_cloud_friends';     // codes I've added, for refresh
   const SDK = '11.6.1';
   const SDK_BASE = 'https://www.gstatic.com/firebasejs/' + SDK + '/';
+  // Baked-in Firebase project so every device/install is cloud-ready with no
+  // setup. The web apiKey is a public client identifier (safe to ship); access
+  // is governed by Firestore security rules + Auth, not by hiding this.
+  const DEFAULT_CONFIG = {
+    apiKey: "AIzaSyCTghYkpuPMFRAiJrS5DQ5Yep6yptHqnMg",
+    authDomain: "macro-fabf9.firebaseapp.com",
+    projectId: "macro-fabf9",
+    storageBucket: "macro-fabf9.firebasestorage.app",
+    messagingSenderId: "70174345853",
+    appId: "1:70174345853:web:b7f746485683c4ddc27f14",
+    measurementId: "G-FZFV6XDZ1P",
+  };
 
   let auth = null, db = null;
   let user = null;            // { uid, email }
@@ -23,7 +35,7 @@ App.Cloud = (function () {
   const listeners = [];
 
   /* ---------- config (safe to keep client-side; it's not a secret) ---------- */
-  function getConfig() { try { return JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch (e) { return null; } }
+  function getConfig() { try { const c = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); if (c && c.apiKey) return c; } catch (e) {} return DEFAULT_CONFIG; }
   function setConfig(cfg) { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
   function clearConfig() { localStorage.removeItem(CFG_KEY); }
   function configured() { const c = getConfig(); return !!(c && c.apiKey && c.projectId && c.appId); }
