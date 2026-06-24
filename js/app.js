@@ -309,22 +309,22 @@ window.App = window.App || {};
     const u = C.currentUser();
     if (!u) {
       host.innerHTML = `
-        ${UI.field('Email', `<input class="input" id="ac-email" type="email" inputmode="email" autocomplete="username" placeholder="you@email.com">`)}
+        ${UI.field('Username or email', `<input class="input" id="ac-email" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username" placeholder="e.g. cameron">`)}
         ${UI.field('Password', `<input class="input" id="ac-pw" type="password" autocomplete="current-password" placeholder="6+ characters">`)}
         <div class="btn-row" style="margin-top:0"><button class="btn primary" id="ac-in">Sign in</button><button class="btn" id="ac-up">Create account</button></div>
         <button class="link" id="ac-edit" style="color:var(--faint);font-size:12px;margin-top:10px">Edit cloud config</button>`;
       const email = () => host.querySelector('#ac-email').value.trim();
       const pw = () => host.querySelector('#ac-pw').value;
       host.querySelector('#ac-in').onclick = async () => {
-        if (!email() || !pw()) return UI.toast('Enter email + password');
+        if (!email() || !pw()) return UI.toast('Enter username + password');
         UI.toast('Signing in…');
         try { await C.signIn(email(), pw()); UI.toast('Signed in ✅', 'good'); renderAccount(host); }
         catch (e) { UI.toast(authMsg(e)); }
       };
       host.querySelector('#ac-up').onclick = async () => {
-        if (!email() || pw().length < 6) return UI.toast('Email + 6-char password');
+        if (!email() || pw().length < 6) return UI.toast('Username + 6-char password');
         UI.toast('Creating account…');
-        try { await C.signUp(email(), pw(), Store.profile().name); UI.toast('Account created ✅', 'good'); renderAccount(host); }
+        try { await C.signUp(email(), pw(), email().indexOf('@') === -1 ? email() : Store.profile().name); UI.toast('Account created ✅', 'good'); renderAccount(host); }
         catch (e) { UI.toast(authMsg(e)); }
       };
       host.querySelector('#ac-edit').onclick = () => cloudConfigSheet(() => renderAccount(host));
@@ -580,32 +580,34 @@ window.App = window.App || {};
     let host = document.getElementById('launch');
     if (!host) { host = document.createElement('div'); host.id = 'launch'; host.className = 'launch'; document.body.appendChild(host); }
     host.classList.remove('hidden');
-    let mode = 'in', busy = false, done = false, fellBack = false;
+    let mode = 'in', busy = false, done = false, fellBack = false, view = null;
 
     const finish = () => {
       if (done) return; done = true;
-      if (Store.get().onboarded) App.enterApp();           // enterApp hides launch + flushes invites
+      if (Store.get().onboarded) App.enterApp();           // hides launch + flushes invites
       else { host.classList.add('hidden'); App.Reminders.start(); onboard(); }
     };
-    const offline = () => { fellBack = true; App.Reminders.start(); App.Profiles.launchSelector(); };
+    const offline = () => { if (done) return; fellBack = true; App.Reminders.start(); App.Profiles.launchSelector(); };
+    const wireOffline = () => { const o = host.querySelector('#au-offline'); if (o) o.onclick = offline; };
 
-    const connecting = () => { host.innerHTML = `
+    const spinnerView = (label) => { host.innerHTML = `
       <div class="launch-inner" style="max-width:380px">
         <div class="launch-logo">M</div>
         <h1>Macro</h1>
-        <p class="muted" style="margin:-14px 0 18px">Connecting…</p>
+        <p class="muted" style="margin:-14px 0 18px">${label}</p>
         <div class="spinner" style="margin:0 auto"></div>
         <button class="link" id="au-offline" style="margin-top:24px;color:var(--faint);font-size:12px">Use without an account</button>
       </div>`;
-      const o = host.querySelector('#au-offline'); if (o) o.onclick = offline;
+      wireOffline();
     };
     const form = () => {
+      view = 'form';
       host.innerHTML = `
         <div class="launch-inner" style="max-width:380px">
           <div class="launch-logo">M</div>
           <h1 style="margin-bottom:8px">${mode === 'up' ? 'Create your account' : 'Welcome back'}</h1>
-          <p class="muted" style="margin:0 0 20px">Sign in to save your training to the cloud and add friends across devices.</p>
-          <input class="input" id="au-email" type="email" inputmode="email" autocomplete="username" placeholder="Email" style="text-align:left;margin-bottom:10px">
+          <p class="muted" style="margin:0 0 20px">Pick any username (or use an email) and a password — it saves your training to the cloud and lets friends add you.</p>
+          <input class="input" id="au-email" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username" placeholder="Username or email" style="text-align:left;margin-bottom:10px">
           <input class="input" id="au-pw" type="password" autocomplete="${mode === 'up' ? 'new-password' : 'current-password'}" placeholder="Password (6+ characters)" style="text-align:left">
           <div id="au-err" style="color:var(--bad);font-size:13px;margin-top:10px;min-height:17px"></div>
           <button class="btn primary" id="au-go">${mode === 'up' ? 'Create account' : 'Sign in'}</button>
@@ -614,42 +616,36 @@ window.App = window.App || {};
         </div>`;
       const errEl = host.querySelector('#au-err');
       const go = async () => {
-        const email = host.querySelector('#au-email').value.trim();
+        const id = host.querySelector('#au-email').value.trim();
         const pw = host.querySelector('#au-pw').value;
-        if (!email || !pw) { errEl.textContent = 'Enter your email and password'; return; }
+        if (!id || !pw) { errEl.textContent = 'Enter a username and password'; return; }
         if (mode === 'up' && pw.length < 6) { errEl.textContent = 'Password needs at least 6 characters'; return; }
-        busy = true; connectingBusy(mode === 'up' ? 'Creating account…' : 'Signing in…');
+        busy = true; view = 'busy'; spinnerView(mode === 'up' ? 'Creating account…' : 'Signing in…');
         try {
-          if (mode === 'up') await App.Cloud.signUp(email, pw, Store.profile().name || '');
-          else await App.Cloud.signIn(email, pw);
-          // onAuthStateChanged → onSignedIn → status 'synced' → update() → finish()
+          if (mode === 'up') await App.Cloud.signUp(id, pw, id.indexOf('@') === -1 ? id : '');
+          else await App.Cloud.signIn(id, pw);
+          // onAuthStateChanged → onSignedIn → 'synced' → update() → finish()
         } catch (e) { busy = false; form(); host.querySelector('#au-err').textContent = authMsg(e); }
       };
       host.querySelector('#au-go').onclick = go;
       host.querySelector('#au-pw').onkeydown = e => { if (e.key === 'Enter') go(); };
       host.querySelector('#au-toggle').onclick = () => { mode = mode === 'up' ? 'in' : 'up'; form(); };
-      host.querySelector('#au-offline').onclick = offline;
-    };
-    const connectingBusy = (label) => { host.innerHTML = `
-      <div class="launch-inner" style="max-width:380px">
-        <div class="launch-logo">M</div>
-        <h1>Macro</h1>
-        <p class="muted" style="margin:-14px 0 18px">${label}</p>
-        <div class="spinner" style="margin:0 auto"></div>
-      </div>`;
+      wireOffline();
     };
 
     const update = () => {
-      if (done || fellBack) return;
-      if (App.Cloud.currentUser() && App.Cloud.getStatus() === 'synced') return finish();
-      if (busy) return;
-      if (App.Cloud.available()) form();
-      else connecting();
+      if (done || fellBack || busy) return;
+      const C = App.Cloud;
+      if (C.currentUser()) { if (C.getStatus() === 'synced') return finish(); if (view !== 'sync') { view = 'sync'; spinnerView('Syncing your data…'); } return; }
+      // No user yet. Only show the form once auth has actually resolved as
+      // signed-out — avoids a form flash that then jumps to the app.
+      if (C.available() && C.authReady()) { if (view !== 'form') form(); }
+      else if (view !== 'connect') { view = 'connect'; spinnerView('Connecting…'); }
     };
     App.Cloud.onChange(update);
     update();
-    // If the cloud SDK can't load (offline / blocked), don't trap the user.
-    setTimeout(() => { if (!done && !fellBack && !App.Cloud.available()) { const o = host.querySelector('#au-offline'); if (!o) connecting(); } }, 6000);
+    // Never trap the user if the cloud SDK can't load (offline / blocked).
+    setTimeout(() => { if (!done && !fellBack && !App.Cloud.authReady() && view !== 'form') { view = 'connect'; spinnerView('Connecting…'); } }, 6000);
   }
 
   /* ---------- boot ---------- */

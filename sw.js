@@ -1,5 +1,5 @@
 /* Macro — service worker: offline cache (cache-first for app shell) */
-const CACHE = 'macro-v26';
+const CACHE = 'macro-v27';
 const ASSETS = [
   './', './index.html', './styles.css', './manifest.json',
   './js/data.js', './js/store.js', './js/adaptive.js', './js/goals.js', './js/running.js', './js/workload.js',

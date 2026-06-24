@@ -30,6 +30,7 @@ App.Cloud = (function () {
   let user = null;            // { uid, email }
   let myCode = null;
   let ready = false;          // SDK loaded + Firebase initialized
+  let authResolved = false;   // onAuthStateChanged has fired at least once
   let status = 'idle';        // idle | syncing | synced | offline | error
   let pushTimer = null;
   const listeners = [];
@@ -41,7 +42,15 @@ App.Cloud = (function () {
   function configured() { const c = getConfig(); return !!(c && c.apiKey && c.projectId && c.appId); }
 
   function available() { return ready && !!auth; }
+  function authReady() { return authResolved; }
   function currentUser() { return user; }
+  // Let people use a plain username instead of an email — we map it to a hidden
+  // address so Firebase (which requires an email) is happy. Emails pass through.
+  function normId(id) {
+    id = String(id || '').trim();
+    if (!id) return id;
+    return id.indexOf('@') !== -1 ? id.toLowerCase() : id.toLowerCase().replace(/[^a-z0-9._-]/g, '') + '@macro.app';
+  }
   function code() { return myCode; }
   function getStatus() { return status; }
   function onChange(fn) { listeners.push(fn); }
@@ -96,6 +105,7 @@ App.Cloud = (function () {
       ready = true;
       Store.onSave(schedulePush);       // push local changes (debounced)
       auth.onAuthStateChanged(async (u) => {
+        authResolved = true;
         if (u) { user = { uid: u.uid, email: u.email }; await onSignedIn(); }
         else { user = null; myCode = null; setStatus('idle'); }
         emit();
@@ -105,14 +115,15 @@ App.Cloud = (function () {
   }
 
   /* ---------- auth ---------- */
-  async function signUp(email, pw, name) {
+  async function signUp(id, pw, name) {
     if (!available()) throw new Error('Cloud sync isn\'t set up yet');
-    const cred = await auth.createUserWithEmailAndPassword(email.trim(), pw);
-    if (name) { try { await cred.user.updateProfile({ displayName: name }); } catch (e) {} Store.setProfile({ name }); }
+    const cred = await auth.createUserWithEmailAndPassword(normId(id), pw);
+    const disp = name || (String(id).indexOf('@') === -1 ? String(id).trim() : '');
+    if (disp) { try { await cred.user.updateProfile({ displayName: disp }); } catch (e) {} Store.setProfile({ name: disp }); }
   }
-  async function signIn(email, pw) {
+  async function signIn(id, pw) {
     if (!available()) throw new Error('Cloud sync isn\'t set up yet');
-    await auth.signInWithEmailAndPassword(email.trim(), pw);
+    await auth.signInWithEmailAndPassword(normId(id), pw);
   }
   async function signOut() { if (auth) await auth.signOut(); }
 
@@ -245,7 +256,7 @@ App.Cloud = (function () {
   }
 
   return {
-    init, configured, available, currentUser, code, getStatus, onChange,
+    init, configured, available, authReady, currentUser, code, getStatus, onChange,
     getConfig, setConfig, clearConfig, parseConfig,
     signUp, signIn, signOut, addByCode, acceptFriendCode, refreshFriends, push,
   };
