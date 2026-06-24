@@ -363,6 +363,8 @@ window.App = window.App || {};
     if (c.includes('weak-password')) return 'Password needs 6+ characters';
     if (c.includes('wrong-password') || c.includes('invalid-credential')) return 'Wrong email or password';
     if (c.includes('user-not-found')) return 'No account with that email';
+    if (c.includes('operation-not-allowed')) return 'Email sign-in isn\'t enabled on the server yet';
+    if (c.includes('too-many-requests')) return 'Too many tries — wait a minute and retry';
     if (c.includes('network')) return 'Network error — check your connection';
     return (e && e.message) || 'Something went wrong';
   }
@@ -573,6 +575,83 @@ window.App = window.App || {};
   };
   App.afterProfileChange = () => App.enterApp();
 
+  /* ---------- sign-in gate (cloud-first launch) ---------- */
+  function authGate() {
+    let host = document.getElementById('launch');
+    if (!host) { host = document.createElement('div'); host.id = 'launch'; host.className = 'launch'; document.body.appendChild(host); }
+    host.classList.remove('hidden');
+    let mode = 'in', busy = false, done = false, fellBack = false;
+
+    const finish = () => {
+      if (done) return; done = true;
+      if (Store.get().onboarded) App.enterApp();           // enterApp hides launch + flushes invites
+      else { host.classList.add('hidden'); App.Reminders.start(); onboard(); }
+    };
+    const offline = () => { fellBack = true; App.Reminders.start(); App.Profiles.launchSelector(); };
+
+    const connecting = () => { host.innerHTML = `
+      <div class="launch-inner" style="max-width:380px">
+        <div class="launch-logo">M</div>
+        <h1>Macro</h1>
+        <p class="muted" style="margin:-14px 0 18px">Connecting…</p>
+        <div class="spinner" style="margin:0 auto"></div>
+        <button class="link" id="au-offline" style="margin-top:24px;color:var(--faint);font-size:12px">Use without an account</button>
+      </div>`;
+      const o = host.querySelector('#au-offline'); if (o) o.onclick = offline;
+    };
+    const form = () => {
+      host.innerHTML = `
+        <div class="launch-inner" style="max-width:380px">
+          <div class="launch-logo">M</div>
+          <h1 style="margin-bottom:8px">${mode === 'up' ? 'Create your account' : 'Welcome back'}</h1>
+          <p class="muted" style="margin:0 0 20px">Sign in to save your training to the cloud and add friends across devices.</p>
+          <input class="input" id="au-email" type="email" inputmode="email" autocomplete="username" placeholder="Email" style="text-align:left;margin-bottom:10px">
+          <input class="input" id="au-pw" type="password" autocomplete="${mode === 'up' ? 'new-password' : 'current-password'}" placeholder="Password (6+ characters)" style="text-align:left">
+          <div id="au-err" style="color:var(--bad);font-size:13px;margin-top:10px;min-height:17px"></div>
+          <button class="btn primary" id="au-go">${mode === 'up' ? 'Create account' : 'Sign in'}</button>
+          <button class="btn ghost" id="au-toggle" style="margin-top:10px">${mode === 'up' ? 'I already have an account' : 'Create a new account'}</button>
+          <button class="link" id="au-offline" style="margin-top:18px;color:var(--faint);font-size:12px">Use without an account</button>
+        </div>`;
+      const errEl = host.querySelector('#au-err');
+      const go = async () => {
+        const email = host.querySelector('#au-email').value.trim();
+        const pw = host.querySelector('#au-pw').value;
+        if (!email || !pw) { errEl.textContent = 'Enter your email and password'; return; }
+        if (mode === 'up' && pw.length < 6) { errEl.textContent = 'Password needs at least 6 characters'; return; }
+        busy = true; connectingBusy(mode === 'up' ? 'Creating account…' : 'Signing in…');
+        try {
+          if (mode === 'up') await App.Cloud.signUp(email, pw, Store.profile().name || '');
+          else await App.Cloud.signIn(email, pw);
+          // onAuthStateChanged → onSignedIn → status 'synced' → update() → finish()
+        } catch (e) { busy = false; form(); host.querySelector('#au-err').textContent = authMsg(e); }
+      };
+      host.querySelector('#au-go').onclick = go;
+      host.querySelector('#au-pw').onkeydown = e => { if (e.key === 'Enter') go(); };
+      host.querySelector('#au-toggle').onclick = () => { mode = mode === 'up' ? 'in' : 'up'; form(); };
+      host.querySelector('#au-offline').onclick = offline;
+    };
+    const connectingBusy = (label) => { host.innerHTML = `
+      <div class="launch-inner" style="max-width:380px">
+        <div class="launch-logo">M</div>
+        <h1>Macro</h1>
+        <p class="muted" style="margin:-14px 0 18px">${label}</p>
+        <div class="spinner" style="margin:0 auto"></div>
+      </div>`;
+    };
+
+    const update = () => {
+      if (done || fellBack) return;
+      if (App.Cloud.currentUser() && App.Cloud.getStatus() === 'synced') return finish();
+      if (busy) return;
+      if (App.Cloud.available()) form();
+      else connecting();
+    };
+    App.Cloud.onChange(update);
+    update();
+    // If the cloud SDK can't load (offline / blocked), don't trap the user.
+    setTimeout(() => { if (!done && !fellBack && !App.Cloud.available()) { const o = host.querySelector('#au-offline'); if (!o) connecting(); } }, 6000);
+  }
+
   /* ---------- boot ---------- */
   function boot() {
     setProfileInitial();
@@ -587,17 +666,21 @@ window.App = window.App || {};
 
     Store.requestPersist();   // ask iOS/Safari to keep our data durable
     if (App.Strava) App.Strava.init();   // complete Strava OAuth redirect if returning
-    if (App.Cloud) App.Cloud.init();     // cloud sync (no-op unless configured)
+    if (App.Cloud) App.Cloud.init();     // cloud sync
     Router.go('today');
 
-    // Entry: fresh → onboarding; otherwise → "Who's training?" profile picker
-    const anyOnboarded = Store.allProfilesData().some(p => p.state.onboarded);
-    if (!anyOnboarded) { App.Reminders.start(); onboard(); }
-    else { App.Profiles.launchSelector(); }
-
-    // Friend invite link (#friend=…) — capture now, prompt once the app UI is
-    // visible (the launch overlay sits above modals).
+    // Capture any friend-invite link before showing a screen.
     App.Profiles.captureInvite();
+
+    // Entry. Cloud-first: sign in right away (or create an account). Falls back
+    // to the local "Who's training?" picker offline or if you opt out.
+    if (App.Cloud && App.Cloud.configured()) {
+      authGate();
+    } else {
+      const anyOnboarded = Store.allProfilesData().some(p => p.state.onboarded);
+      if (!anyOnboarded) { App.Reminders.start(); onboard(); }
+      else { App.Profiles.launchSelector(); }
+    }
 
     // service worker (offline + installable)
     if ('serviceWorker' in navigator) {

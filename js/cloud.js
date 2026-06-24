@@ -198,8 +198,42 @@ App.Cloud = (function () {
     return payload.profile.name || 'Friend';
   }
 
+  // Mutual add from a shared link: I add them now, and drop a request in their
+  // inbox so they auto-add me on their next sync. Mutual leg is best-effort —
+  // the one-way add always succeeds.
+  async function acceptFriendCode(input) {
+    const name = await addByCode(input);
+    const c = String(input || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    try {
+      if (myCode && c && c !== myCode) {
+        await db.collection('requests').doc(c + '_' + myCode).set({ toCode: c, fromCode: myCode, ts: Date.now() });
+      }
+    } catch (e) {}
+    return name;
+  }
+
+  // Auto-accept anyone who added me via a link (so friendships become mutual).
+  async function processInbox() {
+    if (!available() || !user || !myCode) return;
+    try {
+      const q = await db.collection('requests').where('toCode', '==', myCode).get();
+      for (const doc of q.docs) {
+        const from = doc.data().fromCode;
+        try {
+          const snap = await db.collection('friends').doc(from).get();
+          if (snap.exists) {
+            const d = snap.data(); const pl = d.blob ? JSON.parse(d.blob) : d.payload;
+            if (pl && pl.profile) { Store.upsertFriend(from, pl); rememberFriend(from); }
+          }
+          await doc.ref.delete();
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
   async function refreshFriends() {
     if (!available()) return;
+    await processInbox();                 // pick up anyone who added me via a link
     const codes = rememberedFriends();
     for (const c of codes) {
       try {
@@ -207,11 +241,12 @@ App.Cloud = (function () {
         if (snap.exists) { const d = snap.data(); const pl = d.blob ? JSON.parse(d.blob) : d.payload; if (pl && pl.profile) Store.upsertFriend(c, pl); }
       } catch (e) {}
     }
+    if (App.Router) App.Router.refresh();
   }
 
   return {
     init, configured, available, currentUser, code, getStatus, onChange,
     getConfig, setConfig, clearConfig, parseConfig,
-    signUp, signIn, signOut, addByCode, refreshFriends, push,
+    signUp, signIn, signOut, addByCode, acceptFriendCode, refreshFriends, push,
   };
 })();

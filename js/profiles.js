@@ -163,7 +163,12 @@ App.Profiles = (function () {
     };
   }
   function friendLink() {
-    return location.href.split('#')[0] + '#friend=' + b64e(JSON.stringify(friendPayload()));
+    const base = location.href.split('#')[0];
+    // Signed-in: a cloud code link → mutual auto-friend when opened.
+    if (App.Cloud && App.Cloud.available() && App.Cloud.currentUser() && App.Cloud.code())
+      return base + '#add=' + App.Cloud.code();
+    // Offline fallback: a one-way profile snapshot link.
+    return base + '#friend=' + b64e(JSON.stringify(friendPayload()));
   }
   // Stable id for a link/file-imported friend, so re-adding the same person
   // updates them in place instead of creating a duplicate.
@@ -190,10 +195,13 @@ App.Profiles = (function () {
     const st = Store.get();
     const m = LB.metrics(st), lv = LB.levelOf(st);
     const link = friendLink();
+    const cloud = App.Cloud && App.Cloud.available() && App.Cloud.currentUser();
     const summary = `${st.profile.name} on Macro — Level ${lv.level}, ${m.sessions} sessions, ${m.gymStreak}-day streak, ${m.strength} lb total strength. Tap to add me:`;
     UI.modal(`
       <h2>Add me on Macro</h2>
-      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Send this link to a friend. When they open it on their phone, Macro asks them to add you to their leaderboard. There's no central server, so a link (or QR / AirDrop) is how friends connect.</p>
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">${cloud
+        ? 'Send this link. When a friend opens it you\'re added to <b>each other\'s</b> leaderboards automatically — no extra steps.' + (App.Cloud.code() ? ' Your friend code is <b style="font-family:monospace;letter-spacing:1px">' + UI.esc(App.Cloud.code()) + '</b>.' : '')
+        : 'Send this link to a friend. When they open it, Macro adds you to their leaderboard.'}</p>
       <div class="card" style="line-height:1.5">${UI.esc(summary)}</div>
       <textarea class="input" id="sp-link" readonly style="height:78px;font-size:11px;font-family:monospace;margin-top:12px">${UI.esc(link)}</textarea>
       <div class="btn-row"><button class="btn primary" id="sp-copy">🔗 Copy link</button><button class="btn" id="sp-share">Share…</button></div>
@@ -251,29 +259,39 @@ App.Profiles = (function () {
   // A #friend= invite is captured on boot, but prompted only once the app UI is
   // up — the "Who's training?" overlay sits above modals, so an on-boot prompt
   // would be invisible behind it.
-  let pendingInvite = null;
+  let pendingInvite = null;   // { code } (cloud, mutual) or { obj } (offline snapshot)
   function captureInvite() {
     const h = location.hash || '';
-    if (h.indexOf('friend=') === -1) return false;
-    const obj = parseFriendInput(h);
-    try { history.replaceState(null, '', location.href.split('#')[0]); } catch (e) { location.hash = ''; }
-    if (obj) pendingInvite = obj;
-    return !!obj;
+    const addM = h.match(/add=([A-Za-z0-9]+)/);
+    if (addM) { pendingInvite = { code: addM[1].toUpperCase() }; clearHash(); return true; }
+    if (h.indexOf('friend=') !== -1) {
+      const obj = parseFriendInput(h); clearHash();
+      if (obj) { pendingInvite = { obj }; return true; }
+    }
+    return false;
   }
+  function clearHash() { try { history.replaceState(null, '', location.href.split('#')[0]); } catch (e) { location.hash = ''; } }
+  // Opening a friend's link adds them automatically — no prompt.
   function flushInvite() {
     if (!pendingInvite) return;
-    const obj = pendingInvite; pendingInvite = null;
-    const name = obj.profile.name || 'A friend';
-    UI.modal(`
-      <h2>Friend invite</h2>
-      <p style="margin:-6px 0 14px;line-height:1.5"><b>${UI.esc(name)}</b> shared their Macro profile. Add them to your leaderboard so you can compare progress?</p>
-      <div class="btn-row"><button class="btn primary" id="iv-add">Add ${UI.esc(name)}</button><button class="btn ghost" id="iv-no">Not now</button></div>
-    `, (m, close) => {
-      m.querySelector('#iv-add').onclick = () => { Store.upsertFriend(friendCodeFor(obj), obj); close(); UI.toast(name + ' added 🏆', 'good'); if (App.Router) App.Router.refresh(); };
-      m.querySelector('#iv-no').onclick = close;
-    });
+    const inv = pendingInvite;
+    // Cloud code link → mutual auto-add. Needs sign-in; if not ready yet, keep
+    // it pending so it fires right after the user signs in (auth gate → enterApp).
+    if (inv.code) {
+      if (!(App.Cloud && App.Cloud.available() && App.Cloud.currentUser())) return;
+      pendingInvite = null;
+      App.Cloud.acceptFriendCode(inv.code)
+        .then(name => { UI.toast(name + ' added 🏆 — you\'re now friends', 'good'); if (App.Router) App.Router.refresh(); })
+        .catch(e => UI.toast(e.message || 'Could not add that friend'));
+      return;
+    }
+    // Offline snapshot link → one-way add.
+    pendingInvite = null;
+    const obj = inv.obj;
+    Store.upsertFriend(friendCodeFor(obj), obj);
+    UI.toast((obj.profile.name || 'Friend') + ' added 🏆', 'good');
+    if (App.Router) App.Router.refresh();
   }
-  // Back-compat: capture + flush immediately.
   function consumeInvite() { const had = captureInvite(); flushInvite(); return had; }
 
   return { launchSelector, switcher, newProfile, editProfile, shareApp, shareProfile, addFriend, friendLink, friendPayload, captureInvite, flushInvite, consumeInvite };

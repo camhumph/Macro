@@ -57,6 +57,16 @@ service cloud.firestore {
       allow write: if request.auth != null
                    && request.resource.data.owner == request.auth.uid;
     }
+
+    // Friend requests (makes link-adds mutual). You may only create a request
+    // as yourself, and only read/clear requests addressed to your own code.
+    match /requests/{id} {
+      allow create: if request.auth != null
+        && request.resource.data.fromCode is string
+        && get(/databases/$(database)/documents/friends/$(request.resource.data.fromCode)).data.owner == request.auth.uid;
+      allow read, delete: if request.auth != null
+        && get(/databases/$(database)/documents/friends/$(resource.data.toCode)).data.owner == request.auth.uid;
+    }
   }
 }
 ```

@@ -251,6 +251,8 @@ a{color:var(--accent-3)}
 /* ---------- Launch profile selector ---------- */
 .launch{position:fixed;inset:0;z-index:90;background:radial-gradient(120% 90% at 50% 0%,rgba(198,255,58,.1),transparent 60%),var(--bg);display:flex;align-items:center;justify-content:center;padding:24px;padding-top:calc(var(--safe-t) + 24px)}
 .launch.hidden{display:none}
+.spinner{width:30px;height:30px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .launch-inner{width:100%;max-width:480px;text-align:center}
 .launch-logo{width:54px;height:54px;border-radius:15px;margin:0 auto 18px;display:grid;place-items:center;font-weight:800;font-size:28px;color:#0c0d10;background:linear-gradient(135deg,var(--accent),var(--accent-2))}
 .launch-inner h1{font-size:26px;margin:0 0 26px;letter-spacing:-.5px}
