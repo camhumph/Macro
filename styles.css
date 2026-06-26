@@ -253,6 +253,18 @@ a{color:var(--accent-3)}
 .launch.hidden{display:none}
 .spinner{width:30px;height:30px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.cal-row{display:flex;align-items:center;gap:12px;padding:9px 6px;border-top:1px solid var(--line)}
+.cal-row:first-child{border-top:none}
+.cal-row.today{background:rgba(198,255,58,.07);border-radius:12px;border-top:none}
+.cal-row.rest{opacity:.5}
+.cal-d{width:40px;text-align:center;flex-shrink:0}
+.cal-d .cal-wd{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.cal-d b{font-size:17px}
+.cal-w{flex:1;line-height:1.3;min-width:0}
+.cal-w b{font-size:14px}
+.cal-w small{display:block;color:var(--muted);font-size:11px}
+.cal-x{color:var(--faint);font-size:18px;flex-shrink:0}
+.cal-sep{height:8px}
 .launch-inner{width:100%;max-width:480px;text-align:center}
 .launch-logo{width:54px;height:54px;border-radius:15px;margin:0 auto 18px;display:grid;place-items:center;font-weight:800;font-size:28px;color:#0c0d10;background:linear-gradient(135deg,var(--accent),var(--accent-2))}
 .launch-inner h1{font-size:26px;margin:0 0 26px;letter-spacing:-.5px}

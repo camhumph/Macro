@@ -596,6 +596,73 @@ App.Workout = (function () {
     const rot = (DATA.SPLITS[pl.split] || DATA.SPLITS.upperlower).rotation;
     return nextInRotation(rot);
   }
+
+  /* ---------- forward plan (adaptive calendar) ---------- */
+  function dayTypeName(t) {
+    if (!t || t === 'rest') return 'Rest';
+    if (t === 'conditioning') return 'Conditioning';
+    if (String(t).startsWith('rt_')) { const r = Store.getRoutine(t); return r ? r.name : 'Routine'; }
+    return (DATA.DAYS[t] && DATA.DAYS[t].name) || t;
+  }
+  // Project the upcoming days into a concrete plan. Honors days you've already
+  // trained and any day you've switched, and continues the rotation from there —
+  // so switching a day (or an exercise, which changes that day type everywhere)
+  // ripples forward automatically.
+  function projectPlan(days) {
+    days = days || 21;
+    const pl = App.Goals.plan();
+    const rotation = (DATA.SPLITS[pl.split] || DATA.SPLITS.upperlower).rotation;
+    const mode = Store.profile().scheduleMode || 'flexible';
+    const wk = DATA.buildSchedule(pl.split, pl.days, pl.cardio);   // weekday → type
+    const out = [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let ri = rotation.indexOf(nextInRotation(rotation)); if (ri < 0) ri = 0;
+    for (let i = 0; i < days; i++) {
+      const dt = new Date(today); dt.setDate(today.getDate() + i);
+      const dk = Store.todayKey(dt), wd = dt.getDay();
+      const choice = Store.getDayChoice(dk);
+      const log = Store.workoutLog(dk);
+      const trained = !!(log && (log.exercises || []).some(e => (e.sets || []).some(s => s.done)));
+      let type, src;
+      if (choice) { type = choice.type; src = 'choice'; if (rotation.includes(type)) ri = rotation.indexOf(type) + 1; }
+      else if (i === 0 && log) { type = log.dayType; src = trained ? 'done' : 'today'; if (rotation.includes(type)) ri = rotation.indexOf(type) + 1; }
+      else if (i === 0) { type = mode === 'flexible' ? rotation[ri % rotation.length] : wk[wd]; src = 'today'; if (rotation.includes(type)) ri = rotation.indexOf(type) + 1; }
+      else {
+        if (mode === 'flexible') {
+          if (wk[wd] === 'rest') type = 'rest';
+          else if (wk[wd] === 'conditioning') type = 'conditioning';
+          else { type = rotation[ri % rotation.length]; ri++; }
+        } else type = wk[wd];
+        src = 'plan';
+      }
+      out.push({
+        dateKey: dk, date: dt, weekday: wd, type, name: dayTypeName(type),
+        rest: (!type || type === 'rest'), trained, isToday: i === 0,
+        choice: !!choice, deload: !!(choice && choice.deload),
+        count: ((DATA.DAYS[type] && DATA.DAYS[type].exercises) || []).length,
+      });
+    }
+    return out;
+  }
+  // Pick / switch the workout for a specific date (used by the calendar).
+  function planDaySheet(dateKey, cb) {
+    const cur = Store.getDayChoice(dateKey);
+    const d = new Date(dateKey + 'T00:00:00');
+    const label = d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    UI.modal(`
+      <h2>${label}</h2>
+      <p class="muted" style="margin:-8px 0 12px;font-size:13px">Pick this day's workout. The days after it shift to follow.</p>
+      ${SWITCH_GROUPS.map(g => `
+        <div class="meal-head"><b>${g.label}</b><span></span></div>
+        ${g.items.map(k => { const day = DATA.DAYS[k]; const sub = k === 'rest' ? 'Recovery' : k === 'conditioning' ? 'Cardio' : `${(day.exercises || []).length} exercises`;
+          return `<div class="search-result ${cur && cur.type === k ? 'me' : ''}" data-pick="${k}"><div class="sr-main"><b>${UI.esc(day.name)}</b><small>${sub}</small></div><div style="color:var(--accent);font-size:20px">${cur && cur.type === k ? '✓' : '→'}</div></div>`; }).join('')}`).join('')}
+      ${Store.routines().length ? `<div class="meal-head"><b>My Routines</b><span></span></div>${Store.routines().map(r => `<div class="search-result ${cur && cur.type === r.id ? 'me' : ''}" data-pick="${r.id}"><div class="sr-main"><b>${UI.esc(r.name)}</b><small>${r.exercises.length} exercises</small></div><div style="color:var(--accent);font-size:20px">→</div></div>`).join('')}` : ''}
+      ${cur ? `<button class="btn ghost" id="pd-clear" style="margin-top:10px">↺ Back to automatic</button>` : ''}
+    `, (m, close) => {
+      m.querySelectorAll('[data-pick]').forEach(el => el.onclick = () => { Store.setDayChoice(dateKey, el.dataset.pick, false); close(); if (cb) cb(); });
+      const cl = m.querySelector('#pd-clear'); if (cl) cl.onclick = () => { Store.clearDayChoice(dateKey); close(); if (cb) cb(); };
+    });
+  }
   // A session that avoids a sore area.
   function complementFor(soreArea) {
     if (soreArea === 'legs') return 'upperA';
@@ -1048,5 +1115,5 @@ App.Workout = (function () {
     return out.sort((a, b) => b.deficit - a.deficit);
   }
 
-  return { build, render, epley1RM, weightForReps, best1RM, predict, estimatedLifts, anchorOneRM, startEstimate, weeklyVolumeByMuscle, weakSpots };
+  return { build, render, epley1RM, weightForReps, best1RM, predict, estimatedLifts, anchorOneRM, startEstimate, weeklyVolumeByMuscle, weakSpots, projectPlan, dayTypeName, planDaySheet };
 })();

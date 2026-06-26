@@ -250,6 +250,27 @@ App.Stats = (function () {
     </div>`;
   }
 
+  // Adaptive forward calendar for the Plan view.
+  function calendarCard() {
+    const plan = (App.Workout.projectPlan && App.Workout.projectPlan(21)) || [];
+    if (!plan.length) return '';
+    const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const rows = plan.map((p, i) => {
+      const sep = i > 0 && p.weekday === 1 ? '<div class="cal-sep"></div>' : '';
+      const sub = p.trained ? '✓ done' : p.isToday ? 'Today' : p.deload ? 'Deload' : p.choice ? 'switched' : p.rest ? 'Recovery' : (p.count ? p.count + ' exercises' : '');
+      const x = p.trained ? '✅' : p.isToday ? '▶' : p.rest ? '·' : '›';
+      return `${sep}<div class="cal-row ${p.isToday ? 'today' : ''} ${p.rest ? 'rest' : ''}" data-calday="${p.dateKey}">
+        <div class="cal-d"><span class="cal-wd">${wd[p.weekday]}</span><b>${p.date.getDate()}</b></div>
+        <div class="cal-w"><b>${UI.esc(p.name)}</b><small>${sub}</small></div>
+        <div class="cal-x">${x}</div></div>`;
+    }).join('');
+    return `<div class="card" style="margin-top:14px">
+      <div class="spread" style="margin-bottom:4px"><b>📅 Your plan</b><span class="muted" style="font-size:12px">tap a day to switch</span></div>
+      <p class="muted" style="margin:0 0 10px;font-size:12px">Adapts automatically — switch a day or swap an exercise and the rest shifts to follow.</p>
+      ${rows}
+    </div>`;
+  }
+
   /* ---------- Plan: goals, nutrition, weight goal, split ---------- */
   function program(body) {
     const G = App.Goals;
@@ -264,24 +285,14 @@ App.Stats = (function () {
       const pe = body.querySelector('#plan-edit'); if (pe) pe.onclick = () => App.openSettings();
       return;
     }
-    const sched = DATA.buildSchedule(pl.split, pl.days, pl.cardio);
-    const dayName = dt => dt === 'rest' ? 'Rest' : DATA.DAYS[dt].name;
-    const labels = { 1:'Mon', 2:'Tue', 3:'Wed', 4:'Thu', 5:'Fri', 6:'Sat', 0:'Sun' };
-    const order = [1,2,3,4,5,6,0];
     const volTarget = pl.bias === 'strength' ? '4–6 hard sets per movement per week' : '10–20 hard sets per muscle per week';
 
     body.innerHTML = `
       ${G.planSummary(pl)}
+      ${calendarCard()}
       ${App.Workload.card()}
       ${weakCard()}
       <div style="margin-top:14px">${G.guideCard(pl)}</div>
-
-      <div class="card" style="margin-top:14px;line-height:1.5">
-        <div class="spread"><b>${pl.splitName} · ${pl.days}×/week</b><span class="muted" style="font-size:12px">${G.biasLabel(pl.bias)}</span></div>
-        <div style="margin-top:10px">
-          ${order.map(d => `<div class="list-row" style="padding:9px 0"><div class="lr-l"><b>${labels[d]}</b></div><span class="muted">${dayName(sched[d])}</span></div>`).join('')}
-        </div>
-      </div>
 
       <div class="card" style="margin-top:14px;line-height:1.55">
         <b>How it's programmed</b>
@@ -299,6 +310,7 @@ App.Stats = (function () {
     `;
     const e = body.querySelector('#plan-edit');
     if (e) e.onclick = () => App.openSettings();
+    body.querySelectorAll('[data-calday]').forEach(el => el.onclick = () => App.Workout.planDaySheet(el.dataset.calday, () => program(body)));
   }
 
   return { page, open };
