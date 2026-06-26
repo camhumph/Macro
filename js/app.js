@@ -41,6 +41,20 @@ window.App = window.App || {};
   App.Router = Router;
 
   /* ---------- Today dashboard ---------- */
+  // Compact upcoming-week strip for the dashboard.
+  function planStripHTML() {
+    const days = (App.Workout.projectPlan && App.Workout.projectPlan(7)) || [];
+    if (!days.length) return '';
+    const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const short = d => d.rest ? 'Rest' : d.type === 'conditioning' ? 'Cardio' : String(d.name).split('—')[0].trim();
+    return days.map(d => `
+      <button class="plan-chip ${d.isToday ? 'today' : ''} ${d.rest ? 'rest' : ''}" data-planday="${d.dateKey}">
+        <span class="pc-wd">${wd[d.weekday]}</span>
+        <span class="pc-dt">${d.trained ? '✓' : d.date.getDate()}</span>
+        <span class="pc-nm">${UI.esc(short(d))}</span>
+      </button>`).join('');
+  }
+
   function dashboard(view) {
     const p = Store.profile();
     const week = Store.weekFor();
@@ -93,11 +107,17 @@ window.App = window.App || {};
       ${App.Coach.card()}
       ${App.Leaderboard.streakCard()}
 
+      <div class="section-title"><h2>Your Plan</h2><span class="link" id="db-plan">Calendar ▸</span></div>
+      <div class="plan-strip" id="db-planstrip">${planStripHTML()}</div>
+
       <div class="section-title"><h2>Today's Session</h2><span class="link" id="db-stats">Stats ▸</span></div>
       <div id="db-workout"></div>
     `;
 
     App.Workout.render(view.querySelector('#db-workout'));
+    const planLink = view.querySelector('#db-plan');
+    if (planLink) planLink.onclick = () => App.Stats.open('program');
+    view.querySelectorAll('[data-planday]').forEach(el => el.onclick = () => App.Workout.planDaySheet(el.dataset.planday, () => Router.refresh()));
 
     const wb = view.querySelector('#db-weigh');
     if (wb) wb.onclick = () => Router.go('weight');
