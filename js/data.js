@@ -83,11 +83,11 @@ App.DATA = (function () {
   // Reusable exercise definitions. `key` is the stable id used for history.
   const E = {
     // Upper compounds (anchor: bench)
-    inclineBB:   { key:'inclineBB',  name:'Incline Barbell Press', type:'main', sets:4, ratio:0.82, anchor:'bench' },
-    flatBench:   { key:'flatBench',  name:'Flat Barbell Bench',    type:'main', sets:4, ratio:1.00, anchor:'bench' },
-    ohp:         { key:'ohp',        name:'Overhead Press',        type:'main', sets:4, ratio:0.63, anchor:'bench' },
-    bbRow:       { key:'bbRow',      name:'Barbell Row',           type:'main', sets:4, ratio:0.95, anchor:'bench' },
-    pullup:      { key:'pullup',     name:'Weighted Pull-ups',     type:'main', sets:4 },
+    inclineBB:   { key:'inclineBB',  name:'Incline Barbell Press', type:'main', sets:3, ratio:0.82, anchor:'bench' },
+    flatBench:   { key:'flatBench',  name:'Flat Barbell Bench',    type:'main', sets:3, ratio:1.00, anchor:'bench' },
+    ohp:         { key:'ohp',        name:'Overhead Press',        type:'main', sets:3, ratio:0.63, anchor:'bench' },
+    bbRow:       { key:'bbRow',      name:'Barbell Row',           type:'main', sets:3, ratio:0.95, anchor:'bench' },
+    pullup:      { key:'pullup',     name:'Weighted Pull-ups',     type:'main', sets:3 },
     latPull:     { key:'latPull',    name:'Lat Pulldown',          type:'main', sets:3 },
     csRow:       { key:'csRow',      name:'Chest-Supported Row',   type:'acc',  sets:3 },
     inclineDB:   { key:'inclineDB',  name:'Incline DB Press',      type:'acc',  sets:3 },
@@ -99,9 +99,9 @@ App.DATA = (function () {
     skull:       { key:'skull',      name:'Skull Crushers',        type:'acc',  sets:3 },
     facepull:    { key:'facepull',   name:'Face Pulls',            type:'acc',  sets:3 },
     // Lower compounds (anchor: squat)
-    squat:       { key:'squat',      name:'Back Squat',            type:'main', sets:4, ratio:1.00, anchor:'squat' },
-    frontSquat:  { key:'frontSquat', name:'Front Squat',           type:'main', sets:4, ratio:0.85, anchor:'squat' },
-    rdl:         { key:'rdl',        name:'Romanian Deadlift',     type:'main', sets:4, ratio:1.10, anchor:'squat' },
+    squat:       { key:'squat',      name:'Back Squat',            type:'main', sets:3, ratio:1.00, anchor:'squat' },
+    frontSquat:  { key:'frontSquat', name:'Front Squat',           type:'main', sets:3, ratio:0.85, anchor:'squat' },
+    rdl:         { key:'rdl',        name:'Romanian Deadlift',     type:'main', sets:3, ratio:1.10, anchor:'squat' },
     // Lower accessories
     deadlift:    { key:'deadlift',   name:'Deadlift',              type:'main', sets:3, ratio:1.25, anchor:'squat' },
     dbOHP:       { key:'dbOHP',      name:'DB Shoulder Press',     type:'main', sets:3 },

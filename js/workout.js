@@ -68,13 +68,37 @@ App.Workout = (function () {
     };
   }
 
-  // Multi-joint first ordering (lower CNS fatigue on the big lifts), then pair
-  // ONLY antagonist *isolations* into supersets. Heavy compounds are never
-  // supersetted — they run as straight sets with full rest so force output and
-  // technique don't degrade (axial/CNS fatigue), per current hypertrophy science.
+  // Order a session, then pair ONLY antagonist *isolations* into supersets
+  // (heavy compounds always run as straight sets — no back-to-back grinding).
+  // On mixed push/pull days the compounds alternate push → pull → push → pull so
+  // no muscle is left to cool down between its sets, and two same-pattern
+  // pressing movements never sit on top of each other.
   function arrange(list) {
-    const tier = e => e.type === 'plyo' ? 0 : e.type === 'main' ? 1 : e.type === 'acc' ? 2 : e.type === 'abs' ? 3 : 4;
-    const ordered = list.slice().sort((a, b) => tier(a) - tier(b));
+    const plyo = list.filter(e => e.type === 'plyo');
+    const core = list.filter(e => e.type === 'abs');
+    const main = list.filter(e => e.type !== 'plyo' && e.type !== 'abs');
+    const sideOf = e => {
+      const g = e.group;
+      if (g === 'horizPush' || g === 'vertPush' || g === 'triceps') return 'push';
+      if (g === 'horizPull' || g === 'vertPull' || g === 'biceps') return 'pull';
+      return 'other';
+    };
+    const tierSort = arr => arr.sort((a, b) => (a.type === 'main' ? 0 : 1) - (b.type === 'main' ? 0 : 1));
+    const push = tierSort(main.filter(e => sideOf(e) === 'push'));
+    const pull = tierSort(main.filter(e => sideOf(e) === 'pull'));
+    const other = main.filter(e => sideOf(e) === 'other');
+    let body;
+    if (push.length && pull.length) {
+      const otherMain = tierSort(other.filter(e => e.type === 'main'));   // big legs lead if present
+      const otherAcc = other.filter(e => e.type !== 'main');
+      const inter = []; const n = Math.max(push.length, pull.length);
+      for (let i = 0; i < n; i++) { if (push[i]) inter.push(push[i]); if (pull[i]) inter.push(pull[i]); }
+      body = otherMain.concat(inter, otherAcc);
+    } else {
+      body = main.slice().sort((a, b) => (a.type === 'main' ? 0 : 1) - (b.type === 'main' ? 0 : 1));
+    }
+    const ordered = plyo.concat(body, core);
+
     const used = new Array(ordered.length).fill(false);
     const out = []; let letter = 0;
     for (let i = 0; i < ordered.length; i++) {
@@ -82,7 +106,6 @@ App.Workout = (function () {
       const a = ordered[i]; used[i] = true;
       const want = DATA.ANTAG[a.group];
       let j = -1;
-      // accessory ↔ accessory antagonist pairs only (no main lifts back-to-back)
       if (want && a.type === 'acc') for (let k = i + 1; k < ordered.length; k++) {
         if (!used[k] && ordered[k].type === 'acc' && ordered[k].group === want) { j = k; break; }
       }
@@ -101,7 +124,7 @@ App.Workout = (function () {
     ['facepull', 'rearDelt'],
     ['bbCurl', 'inclineCurl', 'hammerCurl', 'preacher'],
     ['pushdown', 'ropePush', 'skull'],
-    ['inclineDB', 'dbBench', 'cableFly'],
+    ['inclineDB', 'cableFly'],
     ['csRow', 'seatedRow', 'tbar'],
     ['legPress', 'hackSquat', 'bulgarian', 'walkLunge'],
     ['legExt', 'legPress'],
@@ -209,12 +232,13 @@ App.Workout = (function () {
       if (ex.sets.length > 2) ex.sets.pop();   // trim a set
       ex.rir = '3–4 RIR · deload';
     });
-    // Final-set intensity techniques — ISOLATIONS only. Heavy compounds are never
-    // taken to failure (CNS/axial fatigue without extra strength benefit).
+    // Final-set intensity techniques — ISOLATIONS only, and only the last couple
+    // so you're not grinding to failure on a dozen sets (junk fatigue). Heavy
+    // compounds are never taken to failure.
     if (!deload && Store.profile().intensityTech && (bias === 'hypertrophy' || bias === 'power')) {
       const TECH = ['Rest-pause', 'Drop set', '3–5s eccentric'];
-      let i = 0;
-      exercises.forEach(ex => { if (ex.type === 'acc') { ex.finisher = TECH[i % TECH.length]; i++; } });
+      const accs = exercises.filter(ex => ex.type === 'acc');
+      accs.slice(-2).forEach((ex, i) => { ex.finisher = TECH[i % TECH.length]; });
     }
     return { dateKey, week, bias, planTitle: pl.title, dayType, dayName, exercises, customized: !!ov, switched: !!choice, deload, isRoutine: !!routine, varied };
   }
